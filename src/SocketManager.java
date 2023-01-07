@@ -22,16 +22,21 @@ public class SocketManager extends Thread{
     boolean oppDisc = false;
 
 
-    public SocketManager(String ip, int port) throws Exception {
-        this.socket = new Socket(ip, port);
-        InetAddress adresa = socket.getInetAddress();
-        System.out.print("Pripojuju se na : "+adresa.getHostAddress()+" se jmenem : "+adresa.getHostName()+"\n" );
-        ins = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-        out = new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())), true);
-        queueWindow = new QueueWindow(this, this.nickname);
-        endGame = new EndGame(this);
-        /* testovaci zprava po pripojeni */
-        out.println("Hello");
+    public SocketManager(String ip, int port) {
+        try {
+            this.socket = new Socket(ip, port);
+            InetAddress adresa = socket.getInetAddress();
+            System.out.print("Pripojuju se na : "+adresa.getHostAddress()+" se jmenem : "+adresa.getHostName()+"\n" );
+            ins = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            out = new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())), true);
+            queueWindow = new QueueWindow(this, this.nickname);
+            endGame = new EndGame(this);
+            /* testovaci zprava po pripojeni */
+            out.println("KIVUPSping12");
+        } catch (IOException e) {
+            System.out.println("Nelze navazat spojeni s " + ip + ":" + port);
+            System.exit(1);
+        }
     }
 
     public SocketManager(String ip) throws Exception {
@@ -75,7 +80,7 @@ public class SocketManager extends Thread{
             try {
                 message = ins.readLine();
                 System.out.println("received: " + message);
-                if (message.contains(PREFIX)) {
+                if (message.contains(PREFIX) || message.contains("OK")) {
                     int start = message.indexOf(PREFIX);
                     message = message.substring(start);
                     /* subSt = typ zpravy */
@@ -170,9 +175,12 @@ public class SocketManager extends Thread{
                     }
                 } else {
                     System.out.println("received message was invalid");
+                    System.out.println("closing port");
+                    socket.close();
                 }
             } catch (IOException e) {
-                throw new RuntimeException(e);
+                System.out.println("Komunikace se serverem byla přerušena");
+                System.exit(1);
             }
         }
     }

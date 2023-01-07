@@ -371,6 +371,7 @@ void* thread_fnc(void* arg) {
 				memset(sbuf, '\0', sizeof(sbuf));
 				sprintf(sbuf, "zprava nebyla validni\n");
 				write(skt, sbuf, sizeof(sbuf));
+				close(skt);
 			}
 			memset(cbuf, '\0', BUFF_SIZE);
 		}
