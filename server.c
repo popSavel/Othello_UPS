@@ -81,6 +81,13 @@ struct message getMessage(char* text) {
 	return mess;
 }
 
+void confirmMessage(int skt) {
+	char sbuf[BUFF_SIZE];
+	memset(sbuf, '\0', BUFF_SIZE);
+	sprintf(sbuf, "OK\n");
+	write(skt, sbuf, sizeof(sbuf));
+}
+
 int isValid(char* message) {
 	return (strncmp("KIVUPS", message, PREFIX_LENGTH) == 0);
 }
@@ -136,10 +143,7 @@ void sendTurns(char* hrac1, int skt) {
 void* thread_ping(void* arg) {
 	struct client_info* clinfo = (client_info*)arg;
 	int skt = clinfo->client_socket;
-	int index, disc_index;
-	int inGame = 0;
-	char empty[NICK_LENGTH] = { '\0' };
-	char player_name[NICK_LENGTH];
+	int index;
 	free(arg);
 	for (int i = 0; i < client_count; i++) {
 		if (sockets[i] == skt) {
@@ -152,56 +156,16 @@ void* thread_ping(void* arg) {
 	sprintf(sbuf, "KIVUPSping12\n");
 	for (;;) {
 		/* odesilani ping zpravy v loopu
-		* pole pings uchovava pro kazdy socket pocet pingu na ketre neprisla odezva
-		* po prekroceni limitu je hrac povazovan za neaktivniho
+		* pole pings se nastavi pro kazdy socket na 1 po odeslani ping zpravy a na 0 po prijeti ping zpravy
+		* pokud klient neposle ping do nekolika sekund je socket ukoncen
 		*/
-		sleep(1);
-		pings[index]++;
+		sleep(20);
+		pings[index] = 1;
 		write(skt, sbuf, sizeof(sbuf));
-		if (pings[index] > 1) {
-			printf("[%d] disconnected\n", skt);
-			if (strlen(players[index]) == 0) {
-				printf("Odpojil se klient bez prihlaseneho uzivatele\n");
-			}
-			else {
-				memset(sbuf, '\0', BUFF_SIZE);
-				sprintf(sbuf, "KIVUPSdisc%ld0%ld%s\n", 14 + strlen(players[index]), strlen(players[index]), players[index]);
-				printf("Odpojil se hrac %s\n", players[index]);
-				/* odebrat pokud byl ve hre */
-				for (int i = 0; i < client_count; i++) {
-					if (strcmp(players[index], pl_in_game[i]) == 0) {
-						inGame = 1;
-						disc_players[disconnected_players] = strdup(players[index]);
-						disc_index = disconnected_players;
-						disconnected_players++;
-						strcpy(player_name, players[index]);
-						players[index] = strdup(empty);
-					}
-				}
-				/* odebrat pokud byl v queue  ale ne ve hre*/
-				for (int i = 0; i < client_count; i++) {
-					if (strcmp(players[index], queue[i]) == 0 && inGame == 0) {
-						players_in_queue--;
-						if (i == players_in_queue - 1) {
-							queue[players_in_queue] = strdup(empty);
-						}
-						else {
-							queue[players_in_queue - 1] = strdup(queue[players_in_queue]);
-							queue[players_in_queue] = strdup(empty);
-						}
-					}			
-					write(sockets[i], sbuf, sizeof(sbuf));
-				}
-				if (inGame == 1) {
-					sleep(10);
-					if (strcmp(disc_players[disc_index], player_name) == 0) {
-						disc_players[disc_index] = strdup(empty);
-						for (int i = 0; i < client_count; i++) {
-							write(sockets[i], sbuf, sizeof(sbuf));
-						}
-					}
-				}
-			}
+		sleep(5);
+		if (pings[index] == 1) {
+			printf("[%d] klient neodpovedel na ping a byl odpojen\n", skt);
+			close(skt);
 			return NULL;
 		}
 	}
@@ -219,18 +183,27 @@ void* thread_fnc(void* arg) {
 
 	sockets[client_count] = skt;
 	pings[client_count] = 0;
+	int index = client_count;
 	client_count++;
 
 	struct message mess;
 
-	printf("[%d] Vitej, %s\r\n", skt, clinfo->addr);
+	printf("[%d] Pripojil se %s\r\n", skt, clinfo->addr);
 
-	int tmp;
+	int tmp, disc_index;
 	char sbuf[BUFF_SIZE];
+	int inGame = 0;
+	char player_name[NICK_LENGTH];
+
+	/* poslani ping zpravy na potvrzeni spojeni */
+	memset(sbuf, '\0', sizeof(sbuf));
+	sprintf(sbuf, "KIVUPSping12\n");
+	write(skt, sbuf, sizeof(sbuf));
 
 		while (tmp = recv(skt, cbuf, BUFF_SIZE, 0) > 0) {
 			printf("[%d] Prijato %s", skt, cbuf);
 			if (isValid(cbuf)) {
+				confirmMessage(skt);
 				mess = getMessage(cbuf);
 				int comp = strcmp(mess.type, "logn");
 				if (comp == 0) {
@@ -239,7 +212,7 @@ void* thread_fnc(void* arg) {
 							strcpy(players[i], mess.content);
 							printf("pridavam %s do seznamu hracu\n", players[i]);
 							memset(sbuf, '\0', sizeof(sbuf));
-							sprintf(sbuf, "hrac pridan\n");
+							sprintf(sbuf, "OK\n");
 							write(skt, sbuf, sizeof(sbuf));
 							break;
 						}
@@ -361,7 +334,7 @@ void* thread_fnc(void* arg) {
 				if (comp == 0) {
 					for (int i = 0; i < client_count; i++) {
 						if (sockets[i] == skt) {
-							pings[i]--;
+							pings[i] = 0;
 						}
 					}
 				}
@@ -375,8 +348,52 @@ void* thread_fnc(void* arg) {
 			}
 			memset(cbuf, '\0', BUFF_SIZE);
 		}
-
-	return NULL;
+		/* odpojil se klient */
+		printf("[%d] klient se odpojil\n", skt);
+		if (strlen(players[index]) == 0) {
+			printf("Odpojil se klient bez prihlaseneho uzivatele\n");
+		}
+		else {
+			memset(sbuf, '\0', BUFF_SIZE);
+			sprintf(sbuf, "KIVUPSdisc%ld0%ld%s\n", 14 + strlen(players[index]), strlen(players[index]), players[index]);
+			printf("Odpojil se hrac %s\n", players[index]);
+			/* odebrat pokud byl ve hre */
+			for (int i = 0; i < client_count; i++) {
+				if (strcmp(players[index], pl_in_game[i]) == 0) {
+					inGame = 1;
+					disc_players[disconnected_players] = strdup(players[index]);
+					disc_index = disconnected_players;
+					disconnected_players++;
+					strcpy(player_name, players[index]);
+					players[index] = strdup(empty);
+				}
+			}
+			/* odebrat pokud byl v queue  ale ne ve hre*/
+			for (int i = 0; i < client_count; i++) {
+				if (strcmp(players[index], queue[i]) == 0 && inGame == 0) {
+					players_in_queue--;
+					if (i == players_in_queue - 1) {
+						queue[players_in_queue] = strdup(empty);
+					}
+					else {
+						queue[players_in_queue - 1] = strdup(queue[players_in_queue]);
+						queue[players_in_queue] = strdup(empty);
+					}
+				}
+				write(sockets[i], sbuf, sizeof(sbuf));
+			}
+			/* pokud se hrac po chvili nepripoji znovu z clienta -> trvale odstranen */
+			if (inGame == 1) {
+				sleep(30);
+				if (strcmp(disc_players[disc_index], player_name) == 0) {
+					disc_players[disc_index] = strdup(empty);
+					for (int i = 0; i < client_count; i++) {
+						write(sockets[i], sbuf, sizeof(sbuf));
+					}
+				}
+			}
+		}
+		return NULL;
 }
 
 int main(int argc, char** argv) {

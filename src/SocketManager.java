@@ -20,19 +20,27 @@ public class SocketManager extends Thread{
     String opp;
 
     boolean oppDisc = false;
+    int unconfirmedMessages = 0;
+    Thread wait;
 
 
     public SocketManager(String ip, int port) {
         try {
             this.socket = new Socket(ip, port);
+            socket.setSoTimeout(10000);
             InetAddress adresa = socket.getInetAddress();
             System.out.print("Pripojuju se na : "+adresa.getHostAddress()+" se jmenem : "+adresa.getHostName()+"\n" );
             ins = new BufferedReader(new InputStreamReader(socket.getInputStream()));
             out = new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())), true);
             queueWindow = new QueueWindow(this, this.nickname);
             endGame = new EndGame(this);
-            /* testovaci zprava po pripojeni */
-            out.println("KIVUPSping12");
+            /* po prijeti se ceka na ping zpravu */
+           String message = ins.readLine();
+           if(message.contains(PREFIX + "ping12")){
+               System.out.println("Spojeni navazano");
+               System.out.println("received: " + message);
+               socket.setSoTimeout(0);
+           }
         } catch (IOException e) {
             System.out.println("Nelze navazat spojeni s " + ip + ":" + port);
             System.exit(1);
@@ -56,9 +64,26 @@ public class SocketManager extends Thread{
         int totalLength = 14 + name.length();
         String message = PREFIX + "logn" + totalLength + "0" + name.length() + name;
         System.out.println("posilam: " + message);
-        out.println(message);
+        sendMessage(message);
         queueWindow.setNick(nickname);
         queueWindow.setVisible(true);
+    }
+
+    private void sendMessage(String message) {
+        out.println(message);
+        unconfirmedMessages++;
+        wait = new Thread(() -> {
+            try {
+                sleep(100);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+            if(unconfirmedMessages > 3){
+                System.out.println("Zprava nebyla potvrzena");
+                System.exit(1);
+            }
+        });
+        wait.start();
     }
 
     /**
@@ -68,7 +93,7 @@ public class SocketManager extends Thread{
         int totalLength = 14 + this.nickname.length();
         String message = PREFIX + "join" + totalLength + "0" + this.nickname.length() + this.nickname;
         System.out.println("posilam: " + message);
-        out.println(message);
+        sendMessage(message);
     }
 
     /**
@@ -80,7 +105,7 @@ public class SocketManager extends Thread{
             try {
                 message = ins.readLine();
                 System.out.println("received: " + message);
-                if (message.contains(PREFIX) || message.contains("OK")) {
+                if (message.contains(PREFIX)) {
                     int start = message.indexOf(PREFIX);
                     message = message.substring(start);
                     /* subSt = typ zpravy */
@@ -124,7 +149,7 @@ public class SocketManager extends Thread{
                             gameWindow.onTurn = true;
                             gameWindow.setTurn();
                         }
-                        if(player.equals(nickname)){
+                        if (player.equals(nickname)) {
                             subSt = message.substring(14 + length, 14 + length + 2);
                             if (!subSt.equals(SKIP)) {
                                 length = Integer.parseInt(subSt);
@@ -144,35 +169,38 @@ public class SocketManager extends Thread{
                         String player = message.substring(14, 14 + length);
                         if (player.equals(opp)) {
                             /* po druhe zprave recn byl oponent odpojen trvale -> navrat do lobby */
-                            if(oppDisc){
+                            if (oppDisc) {
                                 gameWindow.setVisible(false);
                                 queueWindow = new QueueWindow(this, this.nickname);
                                 queueWindow.setNick(nickname);
                                 queueWindow.setVisible(true);
                                 oppDisc = false;
-                            }else{
+                            } else {
                                 gameWindow.oppDisc();
                                 oppDisc = true;
                             }
                         }
                     }
-                    if(subSt.equals("recn")){
+                    if (subSt.equals("recn")) {
                         subSt = message.substring(12, 14);
                         int length = Integer.parseInt(subSt);
                         String player = message.substring(14, 14 + length);
-                        if(player.equals(nickname)){
+                        if (player.equals(nickname)) {
                             gameWindow.onTurn = false;
                             gameWindow.setTurn();
                         }
-                        if(player.equals(opp)){
+                        if (player.equals(opp)) {
                             oppDisc = false;
                             /* oponent po opetovnem pripojeni neni nikdy na tahu, pokud by mel byt posle se prazdny tah */
-                            if(gameWindow.onTurn == false){
+                            if (gameWindow.onTurn == false) {
                                 sendTurn(gameWindow.NON_TURN);
                             }
                             gameWindow.recn();
                         }
                     }
+                }
+                else if(message.contains("OK")){
+                    unconfirmedMessages--;
                 } else {
                     System.out.println("received message was invalid");
                     System.out.println("closing port");
@@ -180,6 +208,9 @@ public class SocketManager extends Thread{
                 }
             } catch (IOException e) {
                 System.out.println("Komunikace se serverem byla přerušena");
+                System.exit(1);
+            }catch (NullPointerException e){
+                System.out.println("Server ukoncil komunikaci");
                 System.exit(1);
             }
         }
@@ -211,7 +242,7 @@ public class SocketManager extends Thread{
         }
         String message = PREFIX + "turn" + totalLength + "0" + this.nickname.length() + this.nickname + turnIndex;
         System.out.println("posilam: " + message);
-        out.println(message);
+        sendMessage(message);
     }
 
     public void gameOver(int[] playerStones, int[] oppStones) {
