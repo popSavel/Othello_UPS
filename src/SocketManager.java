@@ -253,6 +253,7 @@ public class SocketManager extends Thread{
     public void backToLobby() {
         gameWindow.setVisible(false);
         endGame.setVisible(false);
+		queueWindow = new QueueWindow(this, this.nickname);
         queueWindow.setNick(nickname);
         queueWindow.setVisible(true);
     }

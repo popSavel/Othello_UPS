@@ -73,6 +73,7 @@ message *getMessage(char* text) {
 	mess.type[4] = '\0';
 
 	//memset(mess.content, '\0', sizeof(mess.content));
+	//mess.content[strcspn(mess.content, "\n")] = 0;
 	mess.content = malloc(sizeof(char) * length + 1);
 	memcpy(mess.content, &text[14], length);
 	mess.content[strcspn(mess.content, "\n")] = 0;
@@ -285,13 +286,11 @@ void* thread_fnc(void* arg) {
 						players_in_queue++;
 						if (players_in_queue - start_of_queue > 1) {
 							//KIVUPSgame2605ondra05jirka
-							hrac1[NICK_LENGTH];
-							hrac2[NICK_LENGTH];
 							strcpy(hrac1, queue[start_of_queue]);
 							strcpy(hrac2, queue[start_of_queue + 1]);
 							start_of_queue += 2;
 							hrac1_length = strlen(hrac1);
-							hrac2_length = strlen(hrac2);
+							hrac2_length = strlen(hrac2) - 1;
 							total_length = 16 + hrac1_length + hrac2_length;
 
 							memset(sbuf, '\0', sizeof(sbuf));
