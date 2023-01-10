@@ -19,7 +19,6 @@
 #define DEFAULT_IP "127.0.0.1"
 #define DEFAULT_PORT 9999
 
-
 char* players[SERVER_CAPACITY];
 char* queue[SERVER_CAPACITY];
 char* pl_in_game[SERVER_CAPACITY];
@@ -47,16 +46,17 @@ typedef struct client_info
 	char addr[INET6_ADDRSTRLEN];
 } client_info;
 
-struct message {
+typedef struct {
 	char type[5];
 	int length;
 	int content_length;
-	char content[BUFF_SIZE];
+	char *content;
 	char rest[BUFF_SIZE];
-};
+} message;
 
-struct message getMessage(char* text) {
-	struct message mess;
+message *getMessage(char* text) {
+	message mess = {.type = "", .length = 0, .content_length = 0, .content = "", .rest = ""};
+	//struct message mess = (struct message) malloc(150);
 
 	char mess_length[2];
 	memcpy(mess_length, &text[10], 2);
@@ -69,16 +69,22 @@ struct message getMessage(char* text) {
 	mess.content_length = length;
 
 
-	memcpy(mess.content, &text[14], length);
-	mess.content[length] = '\0';
-
 	memcpy(mess.type, &text[6], 4);
 	mess.type[4] = '\0';
 
-	memcpy(mess.rest, &text[14 + strlen(mess.content)], 2);
+	//memset(mess.content, '\0', sizeof(mess.content));
+	mess.content = malloc(sizeof(char) * length + 1);
+	memcpy(mess.content, &text[14], length);
+	mess.content[strcspn(mess.content, "\n")] = 0;
+	//mess.content[length] = '\0';
 
+	//memcpy(mess.rest, &text[14 + strlen(mess.content)], 2);
+	//mess.rest[strcspn(mess.rest, "\n")] = 0;
 
-	return mess;
+	message *mess_return = malloc(sizeof(message));
+	*mess_return = mess;
+
+	return mess_return;
 }
 
 void confirmMessage(int skt) {
@@ -99,7 +105,7 @@ int isValid(char* message) {
 void sendTurns(char* hrac1, int skt) {
 	char sbuf[BUFF_SIZE];
 	char hrac2[NICK_LENGTH];
-	int index1, index2; 
+	int index1, index2;
 	for (int i = 0; i < players_in_game; i++) {
 		if (strcmp(pl_in_game[i], hrac1) == 0) {
 			if (i % 2 == 0) {
@@ -119,7 +125,7 @@ void sendTurns(char* hrac1, int skt) {
 		memset(sbuf, '\0', BUFF_SIZE);
 		if (games[index1][i] == 1) {
 			if (i < 10) {
-				sprintf(sbuf, "KIVUPSturn%ld0%ld%s0%d\n", 16 + strlen(hrac1), strlen(hrac1), hrac1, i);				
+				sprintf(sbuf, "KIVUPSturn%ld0%ld%s0%d\n", 16 + strlen(hrac1), strlen(hrac1), hrac1, i);
 			}
 			else {
 				sprintf(sbuf, "KIVUPSturn%ld0%ld%s%d\n", 16 + strlen(hrac1), strlen(hrac1), hrac1, i);
@@ -151,7 +157,8 @@ void* thread_ping(void* arg) {
 			break;
 		}
 	}
-	char sbuf[BUFF_SIZE];
+	char *sbuf;
+	sbuf = malloc(sizeof(char) * BUFF_SIZE);
 	memset(sbuf, '\0', BUFF_SIZE);
 	sprintf(sbuf, "KIVUPSping12\n");
 	for (;;) {
@@ -163,11 +170,11 @@ void* thread_ping(void* arg) {
 		pings[index] = 1;
 		write(skt, sbuf, sizeof(sbuf));
 		sleep(5);
-		if (pings[index] == 1) {
-			printf("[%d] klient neodpovedel na ping a byl odpojen\n", skt);
-			close(skt);
-			return NULL;
-		}
+		//if (pings[index] == 1) {
+			//printf("[%d] klient neodpovedel na ping a byl odpojenn", skt);
+			//close(skt);
+			//return NULL;
+		//}
 	}
 }
 
@@ -186,14 +193,15 @@ void* thread_fnc(void* arg) {
 	int index = client_count;
 	client_count++;
 
-	struct message mess;
+	message *mess;
 
 	printf("[%d] Pripojil se %s\r\n", skt, clinfo->addr);
 
 	int tmp, disc_index;
 	char sbuf[BUFF_SIZE];
 	int inGame = 0;
-	char player_name[NICK_LENGTH];
+	char *player_name;
+	player_name = malloc(sizeof(char) * NICK_LENGTH);
 
 	/* poslani ping zpravy na potvrzeni spojeni */
 	memset(sbuf, '\0', sizeof(sbuf));
@@ -205,46 +213,48 @@ void* thread_fnc(void* arg) {
 			if (isValid(cbuf)) {
 				confirmMessage(skt);
 				mess = getMessage(cbuf);
-				int comp = strcmp(mess.type, "logn");
+				int comp = strcmp(mess->type, "logn");
 				if (comp == 0) {
 					for (int i = 0; i < client_count; i++) {
 						if (sockets[i] == skt) {
-							strcpy(players[i], mess.content);
+							strcpy(players[i], mess->content);
 							printf("pridavam %s do seznamu hracu\n", players[i]);
 							memset(sbuf, '\0', sizeof(sbuf));
 							sprintf(sbuf, "OK\n");
 							write(skt, sbuf, sizeof(sbuf));
 							break;
 						}
-					}							
+					}
 				}
-				comp = strcmp(mess.type, "join");
+				comp = strcmp(mess->type, "join");
 				if (comp == 0) {
 					int recn = 0;
-					char hrac1[NICK_LENGTH];
-					char hrac2[NICK_LENGTH];
+					char *hrac1;
+					char *hrac2;
+					hrac1 = malloc(sizeof(char) * NICK_LENGTH);
+					hrac2 = malloc(sizeof(char) * NICK_LENGTH);
 					int hrac1_length;
 					int hrac2_length;
 					int total_length;
 					/* nejprve kontrola zda hrac uz nema rozehranou hru */
 					for (int i = 0; i < disconnected_players; i++) {
-						if (strcmp(disc_players[i], mess.content) == 0) {	
+						if (strcmp(disc_players[i], mess->content) == 0) {
 							disc_players[i] = strdup(empty);
-							recn = 1; 
+							recn = 1;
 							for (int j = 0; j < players_in_game; j++) {
-								if (strcmp(pl_in_game[j], mess.content) == 0) {
+								if (strcmp(pl_in_game[j], mess->content) == 0) {
 									if (j % 2 == 0) {
 										strcpy(hrac2, pl_in_game[j + 1]);
-										strcpy(hrac1, mess.content);
-										hrac1_length = strlen(mess.content);
+										strcpy(hrac1, mess->content);
+										hrac1_length = strlen(mess->content);
 										hrac2_length = strlen(hrac2);
 										total_length = 16 + hrac1_length + hrac2_length;
 									}
 									else {
 										strcpy(hrac1, pl_in_game[j - 1]);
-										strcpy(hrac2, mess.content);
+										strcpy(hrac2, mess->content);
 										hrac1_length = strlen(hrac1);
-										hrac2_length = strlen(mess.content);
+										hrac2_length = strlen(mess->content);
 										total_length = 16 + hrac1_length + hrac2_length;
 									}
 									memset(sbuf, '\0', sizeof(sbuf));
@@ -254,11 +264,11 @@ void* thread_fnc(void* arg) {
 							}
 							printf("odesilam %s", sbuf);
 							for (int j = 0; j < client_count; j++) {
-								write(sockets[j], sbuf, sizeof(sbuf));							
+								write(sockets[j], sbuf, sizeof(sbuf));
 							}
 							/* odeslat stav hry a zpravu pro druheho hrace, ze se oponent opet pripojil */
 							sendTurns(hrac1, skt);
-							strcpy(hrac1, mess.content);
+							strcpy(hrac1, mess->content);
 							memset(sbuf, '\0', sizeof(sbuf));
 							sprintf(sbuf, "KIVUPSrecn%ld0%ld%s\n", 14 + strlen(hrac1), strlen(hrac1), hrac1);
 							printf("odesilam %s", sbuf);
@@ -270,11 +280,11 @@ void* thread_fnc(void* arg) {
 					}
 					/* hrac nemel rozehranou hru a pripojil se poprve do queue */
 					if (recn == 0) {
-						strcpy(queue[players_in_queue], mess.content);
+						strcpy(queue[players_in_queue], mess->content);
 						printf("hrac %s ceka na hru\n", queue[players_in_queue]);
 						players_in_queue++;
 						if (players_in_queue - start_of_queue > 1) {
-							//KIVUPSgame2605ondra05jirka				
+							//KIVUPSgame2605ondra05jirka
 							hrac1[NICK_LENGTH];
 							hrac2[NICK_LENGTH];
 							strcpy(hrac1, queue[start_of_queue]);
@@ -307,19 +317,19 @@ void* thread_fnc(void* arg) {
 						}
 					}
 				}
-				comp = strcmp(mess.type, "turn");
+				comp = strcmp(mess->type, "turn");
 				if (comp == 0) {
 					memset(sbuf, '\0', sizeof(sbuf));
-					memcpy(sbuf, &cbuf, mess.length);
+					memcpy(sbuf, &cbuf, mess->length);
 					strcat(sbuf, "\n");
 					printf("odesilam %s", sbuf);
 					for (int i = 0; i < client_count; i++) {
 						write(sockets[i], sbuf, sizeof(sbuf));
 					}
 
-					int turn = atoi(mess.rest);
+					int turn = atoi(mess->rest);
 					for (int i = 0; i < players_in_game; i++) {
-						if (strcmp(mess.content, pl_in_game[i]) == 0) {
+						if (strcmp(mess->content, pl_in_game[i]) == 0) {
 							games[i][turn] = 1;
 							if (i % 2 == 0) {
 								games[i + 1][turn] = 0;
@@ -330,7 +340,7 @@ void* thread_fnc(void* arg) {
 						}
 					}
 				}
-				comp = strcmp(mess.type, "ping");
+				comp = strcmp(mess->type, "ping");
 				if (comp == 0) {
 					for (int i = 0; i < client_count; i++) {
 						if (sockets[i] == skt) {
@@ -437,7 +447,7 @@ int main(int argc, char** argv) {
 
 	addr.sin_port = htons(port);
 	addr.sin_addr.s_addr = inet_addr(ip);
-	
+
 
 	res = bind(skt, (struct sockaddr*)&addr, sizeof(addr));
 	if (res != 0) {
@@ -454,13 +464,12 @@ int main(int argc, char** argv) {
 
 	pthread_t thr;
 	pthread_t ping;
-	
-	char empty[NICK_LENGTH] = { '\0' };
+
 	for (int i = 0; i < SERVER_CAPACITY; i++) {
-		queue[i] = strdup(empty);
-		players[i] = strdup(empty);
-		pl_in_game[i] = strdup(empty);
-		disc_players[i] = strdup(empty);
+        queue[i] = malloc(sizeof(char) * NICK_LENGTH);
+		players[i] = malloc(sizeof(char) * NICK_LENGTH);
+		pl_in_game[i] = malloc(sizeof(char) * NICK_LENGTH);
+		disc_players[i] = malloc(sizeof(char) * NICK_LENGTH);
 	}
 
 	game = fopen("game_data", "w+");
