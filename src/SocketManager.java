@@ -1,7 +1,9 @@
+import javax.swing.*;
 import java.awt.*;
 import java.io.*;
 import java.net.InetAddress;
 import java.net.Socket;
+import java.net.SocketException;
 
 public class SocketManager extends Thread{
 
@@ -16,9 +18,14 @@ public class SocketManager extends Thread{
     GameWindow gameWindow;
     QueueWindow queueWindow;
 
+    LoginWindow loginWindow;
+    JFrame active;
+
     EndGame endGame;
+    ServerAlert serverAlert;
     String opp;
 
+    boolean serverAvailable = true;
     boolean oppDisc = false;
     int unconfirmedMessages = 0;
     Thread wait;
@@ -33,7 +40,11 @@ public class SocketManager extends Thread{
             ins = new BufferedReader(new InputStreamReader(socket.getInputStream()));
             out = new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())), true);
             queueWindow = new QueueWindow(this, this.nickname);
+            loginWindow = new LoginWindow(this);
+            gameWindow = new GameWindow(this);
+            serverAlert = new ServerAlert();
             endGame = new EndGame(this);
+
             /* po prijeti se ceka na ping zpravu */
            String message = ins.readLine();
            if(message.contains(PREFIX + "ping12")){
@@ -55,7 +66,6 @@ public class SocketManager extends Thread{
         this(DEFAUL_IP, DEFAULT_PORT);
     }
 
-
     /**
      * posle na server login zpravu a ukaze queue window
      */
@@ -63,13 +73,13 @@ public class SocketManager extends Thread{
         this.nickname = name;
         int totalLength = 14 + name.length();
         String message = PREFIX + "logn" + totalLength + "0" + name.length() + name;
-        System.out.println("posilam: " + message);
         sendMessage(message);
         queueWindow.setNick(nickname);
         queueWindow.setVisible(true);
     }
 
     private void sendMessage(String message) {
+        System.out.println("posilam: " + message);
         out.println(message);
         unconfirmedMessages++;
         wait = new Thread(() -> {
@@ -78,13 +88,50 @@ public class SocketManager extends Thread{
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
             }
-            if(unconfirmedMessages > 3){
-                System.out.println("Zprava nebyla potvrzena");
-                System.exit(1);
+            if(unconfirmedMessages > 2){
+                try {
+                    socket.setSoTimeout(30000);
+                } catch (SocketException e) {
+                    System.out.println("Error accessing socket");
+                    System.exit(1);
+                }
+                System.out.println("Vypadek serveru");
+                serverUnavailable();
+            }else if(unconfirmedMessages > 0){
+                sendMessage(PREFIX + "ping12");
             }
         });
         wait.start();
     }
+
+    private void serverUnavailable() {
+        serverAvailable = false;
+        if(queueWindow.isVisible()){
+            active = queueWindow;
+        }
+        if(loginWindow.isVisible()){
+            active = loginWindow;
+        }
+        if(gameWindow.isVisible()){
+            active = gameWindow;
+        }
+        if(endGame.isVisible()){
+            active = endGame;
+        }
+        endGame.setVisible(false);
+        gameWindow.setVisible(false);
+        loginWindow.setVisible(false);
+        queueWindow.setVisible(false);
+        serverAlert.setVisible(true);
+    }
+
+    private void serverReconnect() throws SocketException {
+        serverAlert.setVisible(false);
+        serverAvailable = true;
+        active.setVisible(true);
+        socket.setSoTimeout(0);
+    }
+
 
     /**
      * posle na server join zpravu
@@ -92,7 +139,6 @@ public class SocketManager extends Thread{
     public void joinGame() {
         int totalLength = 14 + this.nickname.length();
         String message = PREFIX + "join" + totalLength + "0" + this.nickname.length() + this.nickname;
-        System.out.println("posilam: " + message);
         sendMessage(message);
     }
 
@@ -104,6 +150,9 @@ public class SocketManager extends Thread{
         while(true) {
             try {
                 message = ins.readLine();
+                if(!serverAvailable){
+                    serverReconnect();
+                }
                 System.out.println("received: " + message);
                 if (message.contains(PREFIX)) {
                     int start = message.indexOf(PREFIX);
@@ -241,7 +290,6 @@ public class SocketManager extends Thread{
             }
         }
         String message = PREFIX + "turn" + totalLength + "0" + this.nickname.length() + this.nickname + turnIndex;
-        System.out.println("posilam: " + message);
         sendMessage(message);
     }
 
@@ -253,7 +301,7 @@ public class SocketManager extends Thread{
     public void backToLobby() {
         gameWindow.setVisible(false);
         endGame.setVisible(false);
-		queueWindow = new QueueWindow(this, this.nickname);
+	    queueWindow = new QueueWindow(this, this.nickname);
         queueWindow.setNick(nickname);
         queueWindow.setVisible(true);
     }

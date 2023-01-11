@@ -51,12 +51,11 @@ typedef struct {
 	int length;
 	int content_length;
 	char *content;
-	char rest[BUFF_SIZE];
+	char *rest;
 } message;
 
 message *getMessage(char* text) {
 	message mess = {.type = "", .length = 0, .content_length = 0, .content = "", .rest = ""};
-	//struct message mess = (struct message) malloc(150);
 
 	char mess_length[2];
 	memcpy(mess_length, &text[10], 2);
@@ -72,15 +71,13 @@ message *getMessage(char* text) {
 	memcpy(mess.type, &text[6], 4);
 	mess.type[4] = '\0';
 
-	//memset(mess.content, '\0', sizeof(mess.content));
-	//mess.content[strcspn(mess.content, "\n")] = 0;
 	mess.content = malloc(sizeof(char) * length + 1);
 	memcpy(mess.content, &text[14], length);
 	mess.content[strcspn(mess.content, "\n")] = 0;
-	//mess.content[length] = '\0';
 
-	//memcpy(mess.rest, &text[14 + strlen(mess.content)], 2);
-	//mess.rest[strcspn(mess.rest, "\n")] = 0;
+	mess.rest = malloc(sizeof(char) * 3);
+	memcpy(mess.rest, &text[14 + strlen(mess.content)], 2);
+	mess.rest[strcspn(mess.rest, "\n")] = 0;
 
 	message *mess_return = malloc(sizeof(message));
 	*mess_return = mess;
@@ -183,7 +180,8 @@ void* thread_fnc(void* arg) {
 
 	char cbuf[BUFF_SIZE];
 
-	struct client_info* clinfo = (client_info*)arg;
+	client_info* clinfo = malloc(sizeof(client_info));
+	clinfo = (client_info*)arg;
 
 	int skt = clinfo->client_socket;
 
@@ -210,8 +208,8 @@ void* thread_fnc(void* arg) {
 	write(skt, sbuf, sizeof(sbuf));
 
 		while (tmp = recv(skt, cbuf, BUFF_SIZE, 0) > 0) {
-			printf("[%d] Prijato %s", skt, cbuf);
 			if (isValid(cbuf)) {
+				printf("[%d] Prijato %s", skt, cbuf);
 				confirmMessage(skt);
 				mess = getMessage(cbuf);
 				int comp = strcmp(mess->type, "logn");
@@ -219,10 +217,7 @@ void* thread_fnc(void* arg) {
 					for (int i = 0; i < client_count; i++) {
 						if (sockets[i] == skt) {
 							strcpy(players[i], mess->content);
-							printf("pridavam %s do seznamu hracu\n", players[i]);
-							memset(sbuf, '\0', sizeof(sbuf));
-							sprintf(sbuf, "OK\n");
-							write(skt, sbuf, sizeof(sbuf));
+							printf("pridavam %s do seznamu hracu\n", players[i]);						
 							break;
 						}
 					}
@@ -288,9 +283,11 @@ void* thread_fnc(void* arg) {
 							//KIVUPSgame2605ondra05jirka
 							strcpy(hrac1, queue[start_of_queue]);
 							strcpy(hrac2, queue[start_of_queue + 1]);
+							hrac2[strcspn(hrac2, "\n")] = 0;
 							start_of_queue += 2;
 							hrac1_length = strlen(hrac1);
-							hrac2_length = strlen(hrac2) - 1;
+							/* NA LINUXU jina hodnota */
+							hrac2_length = strlen(hrac2);
 							total_length = 16 + hrac1_length + hrac2_length;
 
 							memset(sbuf, '\0', sizeof(sbuf));
@@ -429,7 +426,6 @@ int main(int argc, char** argv) {
 	int port;
 	char ip[15];
 
-	//147.228.61.0
 	addr.sin_family = AF_INET;
 	if (argc > 2) {
 		port = atoi(argv[2]);

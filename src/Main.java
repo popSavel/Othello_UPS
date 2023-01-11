@@ -12,6 +12,5 @@ class Main
 			soc = new SocketManager();
 		}
 		soc.start();
-		LoginWindow lgn = new LoginWindow(soc);
 	}
 }
