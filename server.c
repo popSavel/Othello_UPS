@@ -23,11 +23,13 @@ char* players[SERVER_CAPACITY];
 char* queue[SERVER_CAPACITY];
 char* pl_in_game[SERVER_CAPACITY];
 char* disc_players[SERVER_CAPACITY];
+char sbuf[BUFF_SIZE];
 int games[SERVER_CAPACITY][BOARD_SIZE];
 int players_in_queue;
 int start_of_queue;
 int sockets[SERVER_CAPACITY];
-int pings[SERVER_CAPACITY];
+int unconfirmedMessages[SERVER_CAPACITY];
+int client_connected[SERVER_CAPACITY];
 int client_count;
 int players_in_game;
 int disconnected_players;
@@ -85,8 +87,11 @@ message *getMessage(char* text) {
 	return mess_return;
 }
 
+void sendMessage(int skt, char* message, int index);
+
+
 void confirmMessage(int skt) {
-	char sbuf[BUFF_SIZE];
+	char *sbuf = malloc(sizeof(char) * BUFF_SIZE);
 	memset(sbuf, '\0', BUFF_SIZE);
 	sprintf(sbuf, "OK\n");
 	write(skt, sbuf, sizeof(sbuf));
@@ -101,8 +106,8 @@ int isValid(char* message) {
 * odesle na socket skt vsechny dosavadni tahy ve hre s hracem hrac1
 */
 void sendTurns(char* hrac1, int skt) {
-	char sbuf[BUFF_SIZE];
-	char hrac2[NICK_LENGTH];
+	char *sbuf = malloc(sizeof(char) * BUFF_SIZE);
+	char* hrac2 = malloc(sizeof(char) * NICK_LENGTH);
 	int index1, index2;
 	for (int i = 0; i < players_in_game; i++) {
 		if (strcmp(pl_in_game[i], hrac1) == 0) {
@@ -144,35 +149,46 @@ void sendTurns(char* hrac1, int skt) {
 	}
 }
 
-void* thread_ping(void* arg) {
-	struct client_info* clinfo = (client_info*)arg;
-	int skt = clinfo->client_socket;
+void* thread_wait(void* arg) {
+	int index = *((int*)arg);
+	sleep(1);
+	if (unconfirmedMessages[index] > 2 && client_connected[index] == 1) {
+		printf("[%d] klient neodpovida\n", sockets[index]);
+		client_connected[index] = 0;
+	}
+	else if (unconfirmedMessages[index] > 0) {
+		sendMessage(sockets[index], "KIVUPSping12\n", index);
+	}
+}
+
+void sendMessage(int skt, char* message, int index) {
+	int* argument = malloc(sizeof(*argument));
+	*argument = index;
+	memset(sbuf, '\0', sizeof(sbuf));
+	strcpy(sbuf, message);
+	write(skt, sbuf, sizeof(sbuf));
+	unconfirmedMessages[index]++;
+	printf("posilam: %s na [%d]\n", message, skt);
+
+	pthread_t confirm;
+	pthread_create(&confirm, NULL, (void*)&thread_wait, argument);
+	pthread_detach(confirm);
+}
+
+void* thread_ping(void *arg) {
+	int skt = *((int *) arg);
 	int index;
-	free(arg);
 	for (int i = 0; i < client_count; i++) {
 		if (sockets[i] == skt) {
 			index = i;
 			break;
 		}
 	}
-	char *sbuf;
-	sbuf = malloc(sizeof(char) * BUFF_SIZE);
-	memset(sbuf, '\0', BUFF_SIZE);
-	sprintf(sbuf, "KIVUPSping12\n");
 	for (;;) {
-		/* odesilani ping zpravy v loopu
-		* pole pings se nastavi pro kazdy socket na 1 po odeslani ping zpravy a na 0 po prijeti ping zpravy
-		* pokud klient neposle ping do nekolika sekund je socket ukoncen
-		*/
-		sleep(20);
-		pings[index] = 1;
-		write(skt, sbuf, sizeof(sbuf));
-		sleep(5);
-		//if (pings[index] == 1) {
-			//printf("[%d] klient neodpovedel na ping a byl odpojenn", skt);
-			//close(skt);
-			//return NULL;
-		//}
+		sleep(30);
+		if (client_connected[index]) {
+			sendMessage(skt, "KIVUPSping12\n", index);
+		}
 	}
 }
 
@@ -188,26 +204,39 @@ void* thread_fnc(void* arg) {
 	char empty[NICK_LENGTH] = { '\0' };
 
 	sockets[client_count] = skt;
-	pings[client_count] = 0;
+	unconfirmedMessages[client_count] = 0;
+	client_connected[client_count] = 1;
+	for (int i = 0; i < BOARD_SIZE; i++) {
+		games[client_count][i] = 0;
+	}
 	int index = client_count;
 	client_count++;
 
 	message *mess;
+	pthread_t ping;
 
 	printf("[%d] Pripojil se %s\r\n", skt, clinfo->addr);
 
 	int tmp, disc_index;
-	char sbuf[BUFF_SIZE];
+	char mess_buf[BUFF_SIZE];
 	int inGame = 0;
 	char *player_name;
 	player_name = malloc(sizeof(char) * NICK_LENGTH);
 
 	/* poslani ping zpravy na potvrzeni spojeni */
-	memset(sbuf, '\0', sizeof(sbuf));
-	sprintf(sbuf, "KIVUPSping12\n");
-	write(skt, sbuf, sizeof(sbuf));
+	memset(mess_buf, '\0', sizeof(mess_buf));
+	sprintf(mess_buf, "KIVUPSping12\n");
+	sendMessage(skt, mess_buf, index);
+	int* argument = malloc(sizeof(*argument));
+	*argument = skt;
+
+	//pthread_create(&ping, NULL, (void*)&thread_wait, argument);
+	//pthread_detach(ping);
 
 		while (tmp = recv(skt, cbuf, BUFF_SIZE, 0) > 0) {
+			if (client_connected[index] == 0) {
+				client_connected[index] = 1;
+			}
 			if (isValid(cbuf)) {
 				printf("[%d] Prijato %s", skt, cbuf);
 				confirmMessage(skt);
@@ -253,23 +282,23 @@ void* thread_fnc(void* arg) {
 										hrac2_length = strlen(mess->content);
 										total_length = 16 + hrac1_length + hrac2_length;
 									}
-									memset(sbuf, '\0', sizeof(sbuf));
-									sprintf(sbuf, "KIVUPSgame%d0%d%s0%d%s\n", total_length, hrac1_length, hrac1, hrac2_length, hrac2);
+									memset(mess_buf, '\0', sizeof(mess_buf));
+									sprintf(mess_buf, "KIVUPSgame%d0%d%s0%d%s\n", total_length, hrac1_length, hrac1, hrac2_length, hrac2);
 									break;
 								}
 							}
-							printf("odesilam %s", sbuf);
+							printf("odesilam %s", mess_buf);
 							for (int j = 0; j < client_count; j++) {
-								write(sockets[j], sbuf, sizeof(sbuf));
+								sendMessage(sockets[j], mess_buf, j);
 							}
 							/* odeslat stav hry a zpravu pro druheho hrace, ze se oponent opet pripojil */
 							sendTurns(hrac1, skt);
 							strcpy(hrac1, mess->content);
-							memset(sbuf, '\0', sizeof(sbuf));
-							sprintf(sbuf, "KIVUPSrecn%ld0%ld%s\n", 14 + strlen(hrac1), strlen(hrac1), hrac1);
-							printf("odesilam %s", sbuf);
-							for (int i = 0; i < client_count; i++) {
-								write(sockets[i], sbuf, sizeof(sbuf));
+							memset(mess_buf, '\0', sizeof(mess_buf));
+							sprintf(mess_buf, "KIVUPSrecn%ld0%ld%s\n", 14 + strlen(hrac1), strlen(hrac1), hrac1);
+							printf("odesilam %s", mess_buf);
+							for (int j = 0; j < client_count; j++) {
+								sendMessage(sockets[j], mess_buf, j);
 							}
 							break;
 						}
@@ -290,11 +319,11 @@ void* thread_fnc(void* arg) {
 							hrac2_length = strlen(hrac2);
 							total_length = 16 + hrac1_length + hrac2_length;
 
-							memset(sbuf, '\0', sizeof(sbuf));
-							sprintf(sbuf, "KIVUPSgame%d0%d%s0%d%s\n", total_length, hrac1_length, hrac1, hrac2_length, hrac2);
-							printf("odesilam %s", sbuf);
+							memset(mess_buf, '\0', sizeof(mess_buf));
+							sprintf(mess_buf, "KIVUPSgame%d0%d%s0%d%s\n", total_length, hrac1_length, hrac1, hrac2_length, hrac2);
+							printf("odesilam %s", mess_buf);
 							for (int i = 0; i < client_count; i++) {
-								write(sockets[i], sbuf, sizeof(sbuf));
+								sendMessage(sockets[i], mess_buf, i);
 							}
 
 							strcpy(pl_in_game[players_in_game], hrac1);
@@ -315,12 +344,12 @@ void* thread_fnc(void* arg) {
 				}
 				comp = strcmp(mess->type, "turn");
 				if (comp == 0) {
-					memset(sbuf, '\0', sizeof(sbuf));
-					memcpy(sbuf, &cbuf, mess->length);
-					strcat(sbuf, "\n");
-					printf("odesilam %s", sbuf);
+					memset(mess_buf, '\0', sizeof(mess_buf));
+					memcpy(mess_buf, &cbuf, mess->length);
+					strcat(mess_buf, "\n");
+					printf("odesilam %s", mess_buf);
 					for (int i = 0; i < client_count; i++) {
-						write(sockets[i], sbuf, sizeof(sbuf));
+						sendMessage(sockets[i], mess_buf, i);
 					}
 
 					int turn = atoi(mess->rest);
@@ -336,20 +365,16 @@ void* thread_fnc(void* arg) {
 						}
 					}
 				}
-				comp = strcmp(mess->type, "ping");
-				if (comp == 0) {
-					for (int i = 0; i < client_count; i++) {
-						if (sockets[i] == skt) {
-							pings[i] = 0;
-						}
-					}
-				}
+			}
+			else if (strncmp("OK", cbuf, 2) == 0) {
+				printf("prijato ok\n");
+				unconfirmedMessages[index]--;
 			}
 			else {
 				printf("Zprava ve spatnem formatu\n");
-				memset(sbuf, '\0', sizeof(sbuf));
-				sprintf(sbuf, "zprava nebyla validni\n");
-				write(skt, sbuf, sizeof(sbuf));
+				memset(mess_buf, '\0', sizeof(mess_buf));
+				sprintf(mess_buf, "zprava nebyla validni\n");
+				sendMessage(skt, mess_buf, index);
 				close(skt);
 			}
 			memset(cbuf, '\0', BUFF_SIZE);
@@ -360,8 +385,8 @@ void* thread_fnc(void* arg) {
 			printf("Odpojil se klient bez prihlaseneho uzivatele\n");
 		}
 		else {
-			memset(sbuf, '\0', BUFF_SIZE);
-			sprintf(sbuf, "KIVUPSdisc%ld0%ld%s\n", 14 + strlen(players[index]), strlen(players[index]), players[index]);
+			memset(mess_buf, '\0', BUFF_SIZE);
+			sprintf(mess_buf, "KIVUPSdisc%ld0%ld%s\n", 14 + strlen(players[index]), strlen(players[index]), players[index]);
 			printf("Odpojil se hrac %s\n", players[index]);
 			/* odebrat pokud byl ve hre */
 			for (int i = 0; i < client_count; i++) {
@@ -386,7 +411,7 @@ void* thread_fnc(void* arg) {
 						queue[players_in_queue] = strdup(empty);
 					}
 				}
-				write(sockets[i], sbuf, sizeof(sbuf));
+				sendMessage(sockets[i], mess_buf, i);
 			}
 			/* pokud se hrac po chvili nepripoji znovu z clienta -> trvale odstranen */
 			if (inGame == 1) {
@@ -394,11 +419,12 @@ void* thread_fnc(void* arg) {
 				if (strcmp(disc_players[disc_index], player_name) == 0) {
 					disc_players[disc_index] = strdup(empty);
 					for (int i = 0; i < client_count; i++) {
-						write(sockets[i], sbuf, sizeof(sbuf));
+						sendMessage(sockets[i], mess_buf, i);
 					}
 				}
 			}
 		}
+		pthread_exit(0);
 		return NULL;
 }
 
@@ -458,7 +484,6 @@ int main(int argc, char** argv) {
 	int inlen = sizeof(incoming);
 
 	pthread_t thr;
-	pthread_t ping;
 
 	for (int i = 0; i < SERVER_CAPACITY; i++) {
         queue[i] = malloc(sizeof(char) * NICK_LENGTH);
@@ -466,6 +491,7 @@ int main(int argc, char** argv) {
 		pl_in_game[i] = malloc(sizeof(char) * NICK_LENGTH);
 		disc_players[i] = malloc(sizeof(char) * NICK_LENGTH);
 	}
+	//sbuf = malloc(sizeof(char) * BUFF_SIZE);
 
 	game = fopen("game_data", "w+");
 
@@ -484,9 +510,6 @@ int main(int argc, char** argv) {
 
 			pthread_create(&thr, NULL, (void*)&thread_fnc, (void*)infoptr);
 			pthread_detach(thr);
-
-			pthread_create(&ping, NULL, (void*)&thread_ping, (void*)infoptr);
-			pthread_detach(ping);
 		}
 	}
 

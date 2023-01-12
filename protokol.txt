@@ -1,0 +1,81 @@
+iptables-legacy -A INPUT -p tcp --dport 9999 -j REJECT
+
+MessageType ::= IA5String(
+		"logn" |
+		"join" |
+		"turn" |
+		"game" |
+        "disc" |
+        "recn" |
+        "ping" |
+	)
+    
+NickType ::= IA5String(SIZE(4..32))    
+TurnType ::= IA5String(SIZE(2)) //policko (A2, B3 ...)
+    
+MessageHeader { MessageType:Type } ::= SEQUENCE {
+		magic       IA5String ("KIVUPS"),
+		command     Type,
+		totalLength INTEGER(0..99)
+	}  
+    
+LoginMessage ::= SEQUENCE {
+		header      MessageHeader{{"logn"}},
+		newNick     NickType,
+	}          
+// KIVUPSlogn1905ondra	
+
+JoinMessage ::= SEQUENCE {
+        header      MessageHeader{{"join"}},
+        nickname    NickType,
+    }
+// KIVUPSjoin1905ondra
+
+GameFoundMessage ::= SEQUENCE{
+        header      MessageHeader{{"game"}},
+        nickname    NickType,
+        nickname    NickType,
+    }
+// KIVUPSgame2605ondra05jirka
+
+TurnMessage ::= SEQUENCE{
+        header      MessageHeader{{"turn"}},
+        nickname    NickType,
+        turn        TurnType,
+    }
+// KIVUPSturn2105ondraA5
+
+DisconnectMessage ::= SEQUENCE{
+        header      MessageHeader{{"disc"}},
+        nickname    NickType,
+    }
+// KIVUPSdisc1905ondra
+
+ReconnectMessage ::= SEQUENCE{
+        header      MessageHeader{{"recn"}},
+        nickname    NickType,
+    }
+// KIVUPSrecn1905ondra
+
+PingMessage ::= SEQUENCE{
+        header      MessageHeader{{"ping"}},
+    }
+// KIVUPSping12
+
+
+
+== Pøepisovací pravidla
+
+IA5String(SIZE(n))           = SEQUENCE_VALUE(0..n)
+
+IA5String(SIZE(p..q))        = INTEGER(p..q) SEQUENCE_VALUE(0..n)
+
+IA5String(a1 | a2 | ... | an) && STRLEN(a1) == STRLEN(a2) == ... == STRLEN(an)
+                             = IA5String(SIZE(an))
+
+INTEGER(p..q) && q < 10      = ToIA5String(SEQUENCE_VALUE)
+INTEGER(p..q) && q < 100     = ToIA5String(SEQUENCE_VALUE, WIDTH(2), PADDING('0'))
+INTEGER(p..q) && q < 1000    = ToIA5String(SEQUENCE_VALUE, WIDTH(3), PADDING('0'))
+INTEGER(p..q) && q < 10000   = ToIA5String(SEQUENCE_VALUE, WIDTH(4), PADDING('0'))
+
+SEQUENCE(SIZE(p..q))         = INTEGER(p..q) SEQUENCE_VALUE(0..n)    

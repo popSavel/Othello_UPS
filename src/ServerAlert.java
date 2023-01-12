@@ -15,7 +15,7 @@ public class ServerAlert extends JFrame {
         infoLabel = new JLabel(alert);
         infoLabel.setFont(new Font("Verdana", Font.BOLD, 15));
         int x = (getWidth() - infoLabel.getFontMetrics(infoLabel.getFont()).stringWidth(alert)) / 2;
-        infoLabel.setBounds(x,35, infoLabel.getFontMetrics(infoLabel.getFont()).stringWidth(alert), 30);
+        infoLabel.setBounds(x,100, infoLabel.getFontMetrics(infoLabel.getFont()).stringWidth(alert), 30);
         add(infoLabel);
 
         setLayout(null);

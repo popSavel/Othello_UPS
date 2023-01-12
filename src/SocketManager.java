@@ -44,13 +44,28 @@ public class SocketManager extends Thread{
             gameWindow = new GameWindow(this);
             serverAlert = new ServerAlert();
             endGame = new EndGame(this);
+            Thread ping = new Thread(() -> {
+                String pingMessage = PREFIX + "ping12";
+                while(true){
+                    try {
+                        sleep(30000);
+                    } catch (InterruptedException e) {
+                        System.out.println("Error accessing socket");
+                        System.exit(1);
+                    }
+                    if(serverAvailable){
+                        sendMessage(pingMessage);
+                    }
+                }
+            });
 
             /* po prijeti se ceka na ping zpravu */
            String message = ins.readLine();
            if(message.contains(PREFIX + "ping12")){
-               System.out.println("Spojeni navazano");
-               System.out.println("received: " + message);
+               System.out.println("Spojeni potvrzeno");
+               out.println("OK");
                socket.setSoTimeout(0);
+               ping.start();
            }
         } catch (IOException e) {
             System.out.println("Nelze navazat spojeni s " + ip + ":" + port);
@@ -155,6 +170,7 @@ public class SocketManager extends Thread{
                 }
                 System.out.println("received: " + message);
                 if (message.contains(PREFIX)) {
+                    confirmMessage();
                     int start = message.indexOf(PREFIX);
                     message = message.substring(start);
                     /* subSt = typ zpravy */
@@ -206,12 +222,6 @@ public class SocketManager extends Thread{
                             }
                         }
                     }
-                    /* ping zpravu pouze posle zpet ve stejne podobe */
-                    if (subSt.equals("ping")) {
-                        System.out.println("posilam: " + message);
-                        out.println(message);
-                    }
-
                     if (subSt.equals("disc")) {
                         subSt = message.substring(12, 14);
                         int length = Integer.parseInt(subSt);
@@ -263,6 +273,10 @@ public class SocketManager extends Thread{
                 System.exit(1);
             }
         }
+    }
+
+    private void confirmMessage() {
+        out.println("OK");
     }
 
     /**
