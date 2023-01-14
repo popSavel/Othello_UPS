@@ -11,6 +11,5 @@ class Main
 		}else{
 			soc = new SocketManager();
 		}
-		soc.start();
 	}
 }

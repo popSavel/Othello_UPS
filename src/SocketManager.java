@@ -4,6 +4,7 @@ import java.io.*;
 import java.net.InetAddress;
 import java.net.Socket;
 import java.net.SocketException;
+import java.net.SocketTimeoutException;
 
 public class SocketManager extends Thread{
 
@@ -29,6 +30,7 @@ public class SocketManager extends Thread{
     boolean oppDisc = false;
     int unconfirmedMessages = 0;
     Thread wait;
+    long lastMessageTime;
 
 
     public SocketManager(String ip, int port) {
@@ -40,21 +42,30 @@ public class SocketManager extends Thread{
             ins = new BufferedReader(new InputStreamReader(socket.getInputStream()));
             out = new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())), true);
             queueWindow = new QueueWindow(this, this.nickname);
-            loginWindow = new LoginWindow(this);
             gameWindow = new GameWindow(this);
             serverAlert = new ServerAlert();
             endGame = new EndGame(this);
             Thread ping = new Thread(() -> {
                 String pingMessage = PREFIX + "ping12";
                 while(true){
-                    try {
-                        sleep(30000);
-                    } catch (InterruptedException e) {
-                        System.out.println("Error accessing socket");
-                        System.exit(1);
-                    }
-                    if(serverAvailable){
+                    if(System.currentTimeMillis() - lastMessageTime > 10000 && serverAvailable){
                         sendMessage(pingMessage);
+                        try {
+                            sleep(3000);
+                        } catch (InterruptedException e) {
+                            throw new RuntimeException(e);
+                        }
+                        if(System.currentTimeMillis() - lastMessageTime > 10000 && unconfirmedMessages > 0){
+                            serverAvailable = false;
+                            System.out.println("Vypadek serveru");
+                            serverUnavailable();
+                            while(!serverAvailable){
+                                if(System.currentTimeMillis() - lastMessageTime > 30000){
+                                    System.out.println("Server stale nekomunikuje, koncim...");
+                                    System.exit(1);
+                                }
+                            }
+                        }
                     }
                 }
             });
@@ -62,10 +73,13 @@ public class SocketManager extends Thread{
             /* po prijeti se ceka na ping zpravu */
            String message = ins.readLine();
            if(message.contains(PREFIX + "ping12")){
+               loginWindow = new LoginWindow(this);
                System.out.println("Spojeni potvrzeno");
                out.println("OK");
                socket.setSoTimeout(0);
+               lastMessageTime = System.currentTimeMillis();
                ping.start();
+               this.start();
            }
         } catch (IOException e) {
             System.out.println("Nelze navazat spojeni s " + ip + ":" + port);
@@ -97,26 +111,6 @@ public class SocketManager extends Thread{
         System.out.println("posilam: " + message);
         out.println(message);
         unconfirmedMessages++;
-        wait = new Thread(() -> {
-            try {
-                sleep(100);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
-            if(unconfirmedMessages > 2){
-                try {
-                    socket.setSoTimeout(30000);
-                } catch (SocketException e) {
-                    System.out.println("Error accessing socket");
-                    System.exit(1);
-                }
-                System.out.println("Vypadek serveru");
-                serverUnavailable();
-            }else if(unconfirmedMessages > 0){
-                sendMessage(PREFIX + "ping12");
-            }
-        });
-        wait.start();
     }
 
     private void serverUnavailable() {
@@ -165,6 +159,7 @@ public class SocketManager extends Thread{
         while(true) {
             try {
                 message = ins.readLine();
+                lastMessageTime = System.currentTimeMillis();
                 if(!serverAvailable){
                     serverReconnect();
                 }
@@ -268,7 +263,7 @@ public class SocketManager extends Thread{
             } catch (IOException e) {
                 System.out.println("Komunikace se serverem byla přerušena");
                 System.exit(1);
-            }catch (NullPointerException e){
+            }catch (NullPointerException e) {
                 System.out.println("Server ukoncil komunikaci");
                 System.exit(1);
             }
