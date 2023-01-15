@@ -1,4 +1,5 @@
 iptables-legacy -A INPUT -p tcp --dport 9999 -j REJECT
+prepnuti klavesnice na linuxu: setxkbmap cz
 
 MessageType ::= IA5String(
 		"logn" |
