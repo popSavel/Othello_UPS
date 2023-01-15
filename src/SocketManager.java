@@ -48,19 +48,19 @@ public class SocketManager extends Thread{
             Thread ping = new Thread(() -> {
                 String pingMessage = PREFIX + "ping12";
                 while(true){
-                    if(System.currentTimeMillis() - lastMessageTime > 10000 && serverAvailable){
+                    if(System.currentTimeMillis() - lastMessageTime > 12000 && serverAvailable){
                         sendMessage(pingMessage);
                         try {
                             sleep(3000);
                         } catch (InterruptedException e) {
                             throw new RuntimeException(e);
                         }
-                        if(System.currentTimeMillis() - lastMessageTime > 10000 && unconfirmedMessages > 0){
+                        if(System.currentTimeMillis() - lastMessageTime > 12000 && unconfirmedMessages > 0){
                             serverAvailable = false;
                             System.out.println("Vypadek serveru");
                             serverUnavailable();
                             while(!serverAvailable){
-                                if(System.currentTimeMillis() - lastMessageTime > 30000){
+                                if(System.currentTimeMillis() - lastMessageTime > 60000){
                                     System.out.println("Server stale nekomunikuje, koncim...");
                                     System.exit(1);
                                 }
@@ -256,9 +256,10 @@ public class SocketManager extends Thread{
                 else if(message.contains("OK")){
                     unconfirmedMessages--;
                 } else {
-                    System.out.println("received message was invalid");
-                    System.out.println("closing port");
+                    System.out.println("nevalidni zprava");
                     socket.close();
+                    System.out.println("Ukoncuji komunikaci");
+                    System.exit(1);
                 }
             } catch (IOException e) {
                 System.out.println("Komunikace se serverem byla přerušena");

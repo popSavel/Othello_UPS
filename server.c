@@ -183,35 +183,12 @@ void temporary_disc(int index) {
 					queue[players_in_queue] = strdup(empty);
 				}
 			}
+			printf("odesilam %s\n", mess_buf);
 			sendMessage(sockets[i], mess_buf, i);
 		}
 	}
-	/* pokud hrac nezacne odpovidat -> trvale odstranen */
-	sleep(30);
-	if (client_connected[index] == 0) {
-		if (was_in_game[index] == 1) {
-			for (int i = 0; i < client_count; i++) {
-				sendMessage(sockets[i], mess_buf, i);
-			}
-		}
-		printf("[%d] ukoncuji komunikaci s klientem\n", sockets[index]);
-		close(sockets[index]);
-	}
 }
 
-
-void* thread_wait(void* arg) {
-	int index = *((int*)arg);
-	sleep(1);
-	if (unconfirmedMessages[index] > 2 && client_connected[index] == 1) {
-		printf("[%d] klient neodpovida\n", sockets[index]);
-		client_connected[index] = 0;
-		temporary_disc(index);
-	}
-	else if (unconfirmedMessages[index] > 0) {
-		sendMessage(sockets[index], "KIVUPSping12\n", index);
-	}
-}
 
 void sendMessage(int skt, char* message, int index) {
 	int* argument = malloc(sizeof(*argument));
@@ -220,13 +197,10 @@ void sendMessage(int skt, char* message, int index) {
 	strcpy(sbuf, message);
 	write(skt, sbuf, sizeof(sbuf));
 	unconfirmedMessages[index]++;
-
-	//pthread_t confirm;
-	//pthread_create(&confirm, NULL, (void*)&thread_wait, argument);
-	//pthread_detach(confirm);
 }
 
 void* thread_ping(void *arg) {
+	char mess_buf[BUFF_SIZE];
 	int skt = *((int *) arg);
 	int index;
 	for (int i = 0; i < client_count; i++) {
@@ -242,11 +216,25 @@ void* thread_ping(void *arg) {
 		if (clock() - last_mess_time > 8000000 && client_connected[index] == 1) {
 			printf("[%d] posilam ping\n", sockets[index]);
 			sendMessage(skt, "KIVUPSping12\n", index);
-			client_connected[index] = 0;
 			sleep(3);
-			if (client_connected[index] == 0) {
+			if (clock() - last_mess_time > 8000000 && unconfirmedMessages[index] > 0) {
 				printf("[%d] klient neodpovida\n", sockets[index]);
 				temporary_disc(index);
+				while (client_connected[index] == 0) {
+					if (clock() - last_mess_time > 71000000) {
+						printf("[%d] ukoncuji komunikaci s klientem\n", sockets[index]);
+						if (was_in_game[index] == 1) {
+							memset(mess_buf, '\0', BUFF_SIZE);
+							sprintf(mess_buf, "KIVUPSdisc%ld0%ld%s\n", 14 + strlen(players[index]), strlen(players[index]), players[index]);
+							for (int i = 0; i < client_count; i++) {
+								sendMessage(sockets[i], mess_buf, i);
+							}
+						}
+						close(sockets[index]);
+						sockets[index] = -1;
+						return NULL;
+					}
+				}
 			}
 		}
 	}
@@ -294,9 +282,13 @@ void* thread_fnc(void* arg) {
 	pthread_detach(ping);
 
 		while (tmp = recv(skt, cbuf, BUFF_SIZE, 0) > 0) {
+			if (sockets[index] == -1) {
+				return NULL;
+			}
 			last_mess_time = clock();
 			if (client_connected[index] == 0) {
 				client_connected[index] = 1;
+				printf("[%d] klient opet komunikuje\n", skt);
 				if (was_in_queue[index] == 1) {
 					strcpy(queue[players_in_queue], players[index]);
 					printf("hrac %s ceka na hru\n", queue[players_in_queue]);

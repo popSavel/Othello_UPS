@@ -151,19 +151,21 @@ public class GameWindow extends JFrame {
                     int x = (e.getX() - 38) / 80;
                     int y = (e.getY() - 80) / 80;
                     int index = y * 8 + x;
-                    if(oppStones[index] != 1 && playerStones[index] != 1) {
-                        if(isOutFlanking(index, true)) {
-                            Rectangle2D rec = cells[index];
-                            Graphics g = panel.getGraphics();
-                            g.setColor(color);
-                            g.fillOval((int)rec.getX() + 10,(int) rec.getY() + 10, 60, 60);
-                            onTurn = false;
-                            setTurn();
-                            soc.sendTurn(index);
-                            playerStones[index] = 1;
-                            skipLabel.setVisible(false);
-                            if(gameOver()){
-                                soc.gameOver(playerStones, oppStones);
+                    if(index < 64 && index >= 0){
+                        if(oppStones[index] != 1 && playerStones[index] != 1) {
+                            if(isOutFlanking(index, true)) {
+                                Rectangle2D rec = cells[index];
+                                Graphics g = panel.getGraphics();
+                                g.setColor(color);
+                                g.fillOval((int)rec.getX() + 10,(int) rec.getY() + 10, 60, 60);
+                                onTurn = false;
+                                setTurn();
+                                soc.sendTurn(index);
+                                playerStones[index] = 1;
+                                skipLabel.setVisible(false);
+                                if(gameOver()){
+                                    soc.gameOver(playerStones, oppStones);
+                                }
                             }
                         }
                     }
