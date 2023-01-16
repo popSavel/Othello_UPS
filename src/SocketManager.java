@@ -4,7 +4,6 @@ import java.io.*;
 import java.net.InetAddress;
 import java.net.Socket;
 import java.net.SocketException;
-import java.net.SocketTimeoutException;
 
 public class SocketManager extends Thread{
 
@@ -48,24 +47,9 @@ public class SocketManager extends Thread{
             Thread ping = new Thread(() -> {
                 String pingMessage = PREFIX + "ping12";
                 while(true){
-                    if(System.currentTimeMillis() - lastMessageTime > 12000 && serverAvailable){
+                    if(System.currentTimeMillis() - lastMessageTime > 20000 && serverAvailable){
                         sendMessage(pingMessage);
-                        try {
-                            sleep(3000);
-                        } catch (InterruptedException e) {
-                            throw new RuntimeException(e);
-                        }
-                        if(System.currentTimeMillis() - lastMessageTime > 12000 && unconfirmedMessages > 0){
-                            serverAvailable = false;
-                            System.out.println("Vypadek serveru");
-                            serverUnavailable();
-                            while(!serverAvailable){
-                                if(System.currentTimeMillis() - lastMessageTime > 60000){
-                                    System.out.println("Server stale nekomunikuje, koncim...");
-                                    System.exit(1);
-                                }
-                            }
-                        }
+                        lastMessageTime = System.currentTimeMillis();
                     }
                 }
             });
@@ -109,8 +93,31 @@ public class SocketManager extends Thread{
 
     private void sendMessage(String message) {
         System.out.println("posilam: " + message);
-        out.println(message);
         unconfirmedMessages++;
+        wait = new Thread(() -> {
+            try {
+                sleep(100);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+            if(unconfirmedMessages > 2){
+                long discTime = System.currentTimeMillis();
+                System.out.println("Vypadek serveru");
+                serverUnavailable();
+                while(true){
+                    if(System.currentTimeMillis() - discTime > 60000 && !serverAvailable){
+                        System.out.println("Server prestal komunikovat, koncim");
+                        System.exit(1);
+                    }else if(serverAvailable){
+                        return;
+                    }
+                }
+            }else if(unconfirmedMessages > 0){
+                sendMessage(PREFIX + "ping12");
+            }
+        });
+        out.println(message);
+        wait.start();
     }
 
     private void serverUnavailable() {
@@ -139,6 +146,7 @@ public class SocketManager extends Thread{
         serverAvailable = true;
         active.setVisible(true);
         socket.setSoTimeout(0);
+        unconfirmedMessages = 0;
     }
 
 
