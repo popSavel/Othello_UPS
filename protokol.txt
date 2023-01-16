@@ -63,6 +63,8 @@ PingMessage ::= SEQUENCE{
     }
 // KIVUPSping12
 
+
+
 == Pøepisovací pravidla
 
 IA5String(SIZE(n))           = SEQUENCE_VALUE(0..n)
