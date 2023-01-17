@@ -37,6 +37,9 @@ int was_in_queue[SERVER_CAPACITY];
 int was_in_game[SERVER_CAPACITY];
 clock_t last_mess_time[SERVER_CAPACITY];
 
+int com_ext[SERVER_CAPACITY];
+int ping_ext[SERVER_CAPACITY];
+
 void die(const char* chr) {
 	printf("ERROR: %s\r\n", chr);
 	exit(1);
@@ -217,6 +220,10 @@ void* thread_ping(void *arg) {
 	last_mess_time[index] = clock();
 	sendMessage(skt, "KIVUPSping12\n", index);
 	for (;;) {
+        if(com_ext[index] == 1){
+            pthread_exit(NULL);
+            return NULL;
+        }
 		if (clock() - last_mess_time[index] > 10000000 && client_connected[index] == 1) {
 			printf("[%d] posilam ping\n", sockets[index]);
 			sendMessage(skt, "KIVUPSping12\n", index);
@@ -229,7 +236,6 @@ void* thread_ping(void *arg) {
 						printf("[%d] ukoncuji komunikaci s klientem\n", sockets[index]);
 						if (was_in_game[index] == 1) {
 							memset(mess_buf, '\0', BUFF_SIZE);
-							/* jina hodnota na linux */
 							sprintf(mess_buf, "KIVUPSdisc%ld0%ld%s\n", 14 + strlen(players[index]), strlen(players[index]), players[index]);
 							for (int i = 0; i < client_count; i++) {
 								sendMessage(sockets[i], mess_buf, i);
@@ -278,6 +284,10 @@ void* thread_fnc(void* arg) {
 	was_in_queue[client_count] = 0;
 	unconfirmedMessages[client_count] = 0;
 	client_connected[client_count] = 1;
+
+	com_ext[client_count] = 0;
+	ping_ext[client_count] = 0;
+
 	for (int i = 0; i < BOARD_SIZE; i++) {
 		games[client_count][i] = 0;
 	}
@@ -508,7 +518,8 @@ void* thread_fnc(void* arg) {
 				}
 			}
 		}
-		pthread_exit(0);
+		com_ext[index] = 1;
+		pthread_exit(NULL);
 		return NULL;
 }
 

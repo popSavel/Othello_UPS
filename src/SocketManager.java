@@ -101,7 +101,7 @@ public class SocketManager extends Thread{
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
             }
-            if(unconfirmedMessages > 2){
+            if(unconfirmedMessages > 3){
                 long discTime = System.currentTimeMillis();
                 System.out.println("Vypadek serveru");
                 serverUnavailable();
@@ -114,7 +114,10 @@ public class SocketManager extends Thread{
                     }
                 }
             }else if(unconfirmedMessages > 0){
-                sendMessage(PREFIX + "ping12");
+                sleep(500);
+                if(unconfirmedMessages > 0){
+                    sendMessage(PREFIX + "ping12");
+                }
             }
         });
         out.println(message);
