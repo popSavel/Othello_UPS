@@ -27,7 +27,8 @@ public class SocketManager extends Thread{
 
     boolean serverAvailable = true;
     boolean oppDisc = false;
-    int unconfirmedMessages = 0;
+    int messagesSend = 0;
+    int messagesConfirmed = 0;
     Thread wait;
     long lastMessageTime;
 
@@ -48,7 +49,7 @@ public class SocketManager extends Thread{
                 String pingMessage = PREFIX + "ping12";
                 while(true){
                     if(System.currentTimeMillis() - lastMessageTime > 20000 && serverAvailable){
-                        unconfirmedMessages = 0;
+                        //unconfirmedMessages = 0;
                         sendMessage(pingMessage);
                         lastMessageTime = System.currentTimeMillis();
                     }
@@ -94,14 +95,15 @@ public class SocketManager extends Thread{
 
     private void sendMessage(String message) {
         System.out.println("posilam: " + message);
-        unconfirmedMessages++;
+        int sendNow = messagesSend;
+        messagesSend++;
         wait = new Thread(() -> {
             try {
                 sleep(100);
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
             }
-            if(unconfirmedMessages > 3){
+            if(sendNow - messagesConfirmed > 2){
                 long discTime = System.currentTimeMillis();
                 System.out.println("Vypadek serveru");
                 serverUnavailable();
@@ -113,11 +115,8 @@ public class SocketManager extends Thread{
                         return;
                     }
                 }
-            }else if(unconfirmedMessages > 0){
-                sleep(500);
-                if(unconfirmedMessages > 0){
-                    sendMessage(PREFIX + "ping12");
-                }
+            }else if(sendNow - messagesConfirmed > 0){
+                sendMessage(PREFIX + "ping12");
             }
         });
         out.println(message);
@@ -150,7 +149,6 @@ public class SocketManager extends Thread{
         serverAvailable = true;
         active.setVisible(true);
         socket.setSoTimeout(0);
-        unconfirmedMessages = 0;
     }
 
 
@@ -266,7 +264,7 @@ public class SocketManager extends Thread{
                     }
                 }
                 else if(message.contains("OK")){
-                    unconfirmedMessages--;
+                    messagesConfirmed++;
                 } else {
                     System.out.println("nevalidni zprava");
                     socket.close();
