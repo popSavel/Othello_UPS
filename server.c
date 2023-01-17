@@ -35,7 +35,7 @@ int players_in_game;
 int disconnected_players;
 int was_in_queue[SERVER_CAPACITY];
 int was_in_game[SERVER_CAPACITY];
-clock_t last_mess_time;
+clock_t last_mess_time[SERVER_CAPACITY];
 
 void die(const char* chr) {
 	printf("ERROR: %s\r\n", chr);
@@ -60,6 +60,8 @@ typedef struct {
 message *getMessage(char* text) {
 	message mess = {.type = "", .length = 0, .content_length = 0, .content = "", .rest = ""};
 
+	text[strlen(text) - 1] = '\0';
+
 	char mess_length[2];
 	memcpy(mess_length, &text[10], 2);
 	int length = atoi(mess_length);
@@ -77,9 +79,13 @@ message *getMessage(char* text) {
 	mess.content = malloc(sizeof(char) * length + 1);
 	memcpy(mess.content, &text[14], length);
 	mess.content[strcspn(mess.content, "\n")] = 0;
+	/* ostrani CR(ascii 13) */
+	if(strlen(mess.content) != length && mess.content[strlen(mess.content) - 1] == 13){
+        mess.content[strlen(mess.content) - 1] = '\0';
+	}
 
 	mess.rest = malloc(sizeof(char) * 3);
-	memcpy(mess.rest, &text[14 + strlen(mess.content)], 2);
+	memcpy(mess.rest, &text[14 + strlen(mess.content)], 3);
 	mess.rest[strcspn(mess.rest, "\n")] = 0;
 
 	message *mess_return = malloc(sizeof(message));
@@ -208,21 +214,22 @@ void* thread_ping(void *arg) {
 		}
 	}
 	sleep(2);
-	last_mess_time = clock();
+	last_mess_time[index] = clock();
 	sendMessage(skt, "KIVUPSping12\n", index);
 	for (;;) {
-		if (clock() - last_mess_time > 10000000 && client_connected[index] == 1) {
+		if (clock() - last_mess_time[index] > 10000000 && client_connected[index] == 1) {
 			printf("[%d] posilam ping\n", sockets[index]);
 			sendMessage(skt, "KIVUPSping12\n", index);
 			sleep(3);
-			if (clock() - last_mess_time > 10000000 && unconfirmedMessages[index] > 0) {
+			if (clock() - last_mess_time[index] > 10000000 && unconfirmedMessages[index] > 0) {
 				printf("[%d] klient neodpovida\n", sockets[index]);
 				temporary_disc(index);
 				while (client_connected[index] == 0) {
-					if (clock() - last_mess_time > 71000000 && sockets[index] != -1) {
+					if (clock() - last_mess_time[index] > 80000000 && sockets[index] != -1) {
 						printf("[%d] ukoncuji komunikaci s klientem\n", sockets[index]);
 						if (was_in_game[index] == 1) {
 							memset(mess_buf, '\0', BUFF_SIZE);
+							/* jina hodnota na linux */
 							sprintf(mess_buf, "KIVUPSdisc%ld0%ld%s\n", 14 + strlen(players[index]), strlen(players[index]), players[index]);
 							for (int i = 0; i < client_count; i++) {
 								sendMessage(sockets[i], mess_buf, i);
@@ -292,6 +299,7 @@ void* thread_fnc(void* arg) {
 	int* argument = malloc(sizeof(*argument));
 	*argument = skt;
 
+	last_mess_time[index] = clock();
 	pthread_create(&ping, NULL, (void*)&thread_ping, argument);
 	pthread_detach(ping);
 
@@ -299,20 +307,22 @@ void* thread_fnc(void* arg) {
 			if (sockets[index] == -1) {
 				return NULL;
 			}
-			last_mess_time = clock();
+			last_mess_time[index] = clock();
 			if (client_connected[index] == 0) {
+                printf("prepinam\n");
 				client_connected[index] = 1;
 			}
 			if (isValid(cbuf)) {
 				printf("[%d] Prijato %s", skt, cbuf);
 				confirmMessage(skt);
+				mess = malloc(sizeof(message));
 				mess = getMessage(cbuf);
 				int comp = strcmp(mess->type, "logn");
 				if (comp == 0) {
 					for (int i = 0; i < client_count; i++) {
 						if (sockets[i] == skt) {
 							strcpy(players[i], mess->content);
-							printf("pridavam %s do seznamu hracu\n", players[i]);						
+							printf("pridavam %s do seznamu hracu\n", players[i]);
 							break;
 						}
 					}
@@ -324,8 +334,8 @@ void* thread_fnc(void* arg) {
 					char *hrac2;
 					hrac1 = malloc(sizeof(char) * NICK_LENGTH);
 					hrac2 = malloc(sizeof(char) * NICK_LENGTH);
-					int hrac1_length;
-					int hrac2_length;
+					int hrac1_length = 0;
+					int hrac2_length = 0;
 					int total_length;
 					/* nejprve kontrola zda hrac uz nema rozehranou hru */
 					for (int i = 0; i < disconnected_players; i++) {
@@ -372,20 +382,52 @@ void* thread_fnc(void* arg) {
 					/* hrac nemel rozehranou hru a pripojil se poprve do queue */
 					if (recn == 0) {
 						strcpy(queue[players_in_queue], mess->content);
+						int size = strlen(mess->content);
+						//queue[players_in_queue][size - 1] = '\0';
 						printf("hrac %s ceka na hru\n", queue[players_in_queue]);
 						players_in_queue++;
 						if (players_in_queue - start_of_queue > 1) {
 							//KIVUPSgame2605ondra05jirka
-							strcpy(hrac1, queue[start_of_queue]);
-							strcpy(hrac2, queue[start_of_queue + 1]);
-							hrac2[strcspn(hrac2, "\n")] = 0;
-							start_of_queue += 2;
-							hrac1_length = strlen(hrac1);
+							//hrac1_length = strlen(queue[start_of_queue]);
 							/* NA LINUXU jina hodnota */
+							//hrac2_length = strlen(queue[start_of_queue + 1]) - 1;
+							//printf("hraci pred pridanim: %s, %s\n", queue[start_of_queue], queue[start_of_queue + 1]);
+							//printf("velikosti pred hrou: %d, %d\n", strlen(queue[start_of_queue]), strlen(queue[start_of_queue + 1]));
+							//strcpy(hrac1, queue[start_of_queue]);
+							//strcpy(hrac2, queue[start_of_queue] + 1);
+							//memcpy(hrac1, queue[start_of_queue], strlen(queue[start_of_queue]));
+							//memcpy(hrac2, queue[start_of_queue + 1], strlen(queue[start_of_queue + 1]));
+							//strcpy(&hrac1, queue[start_of_queue]);
+							//strcpy(&hrac2, queue[start_of_queue + 1]);
+							hrac1 = queue[start_of_queue];
+							hrac2 = queue[start_of_queue + 1];
+							//hrac1[strlen(hrac1) - 1] = '\0';
+							//hrac2[strlen(hrac2) - 1] = '\0';
+							//hrac2[strcspn(hrac2, "\n")] = 0;
+							//hrac2[strcspn(hrac2, "\0")] = 0;
+							//hrac2[strcspn(hrac1, "\n")] = 0;
+							//hrac2[strcspn(hrac1, "\0")] = 0;
+							hrac1_length = strlen(hrac1);
 							hrac2_length = strlen(hrac2);
+							/*
+							if(strchr(hrac2, '\0')){
+                                hrac2_length = strlen(hrac2);
+							}else{
+                                hrac2_length = strlen(hrac2) - 1;
+							}
+							if(strchr(hrac1, '\0')){
+                                hrac1_length = strlen(hrac1);
+							}else{
+                                hrac1_length = strlen(hrac1) - 1;
+							}*/
+							start_of_queue += 2;
+							//hrac1_length = strlen(hrac1);
+							/* jina hodnotz linux */
+							//total_length = 16 + strlen(queue[start_of_queue]) + strlen(queue[start_of_queue + 1]);
 							total_length = 16 + hrac1_length + hrac2_length;
 
 							memset(mess_buf, '\0', sizeof(mess_buf));
+							//sprintf(mess_buf, "KIVUPSgame%d0%d%s0%d%s\n", total_length, strlen(queue[start_of_queue]), hrac1, strlen(queue[start_of_queue + 1]), hrac2);
 							sprintf(mess_buf, "KIVUPSgame%d0%d%s0%d%s\n", total_length, hrac1_length, hrac1, hrac2_length, hrac2);
 							printf("odesilam %s", mess_buf);
 							for (int i = 0; i < client_count; i++) {

@@ -48,6 +48,7 @@ public class SocketManager extends Thread{
                 String pingMessage = PREFIX + "ping12";
                 while(true){
                     if(System.currentTimeMillis() - lastMessageTime > 20000 && serverAvailable){
+                        unconfirmedMessages = 0;
                         sendMessage(pingMessage);
                         lastMessageTime = System.currentTimeMillis();
                     }
