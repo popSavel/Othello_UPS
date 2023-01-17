@@ -237,6 +237,7 @@ void* thread_ping(void *arg) {
 						}
 						close(sockets[index]);
 						sockets[index] = -1;
+						pthread_exit(NULL);
 						return NULL;
 					}
 				}
@@ -388,46 +389,14 @@ void* thread_fnc(void* arg) {
 						players_in_queue++;
 						if (players_in_queue - start_of_queue > 1) {
 							//KIVUPSgame2605ondra05jirka
-							//hrac1_length = strlen(queue[start_of_queue]);
-							/* NA LINUXU jina hodnota */
-							//hrac2_length = strlen(queue[start_of_queue + 1]) - 1;
-							//printf("hraci pred pridanim: %s, %s\n", queue[start_of_queue], queue[start_of_queue + 1]);
-							//printf("velikosti pred hrou: %d, %d\n", strlen(queue[start_of_queue]), strlen(queue[start_of_queue + 1]));
-							//strcpy(hrac1, queue[start_of_queue]);
-							//strcpy(hrac2, queue[start_of_queue] + 1);
-							//memcpy(hrac1, queue[start_of_queue], strlen(queue[start_of_queue]));
-							//memcpy(hrac2, queue[start_of_queue + 1], strlen(queue[start_of_queue + 1]));
-							//strcpy(&hrac1, queue[start_of_queue]);
-							//strcpy(&hrac2, queue[start_of_queue + 1]);
 							hrac1 = queue[start_of_queue];
 							hrac2 = queue[start_of_queue + 1];
-							//hrac1[strlen(hrac1) - 1] = '\0';
-							//hrac2[strlen(hrac2) - 1] = '\0';
-							//hrac2[strcspn(hrac2, "\n")] = 0;
-							//hrac2[strcspn(hrac2, "\0")] = 0;
-							//hrac2[strcspn(hrac1, "\n")] = 0;
-							//hrac2[strcspn(hrac1, "\0")] = 0;
 							hrac1_length = strlen(hrac1);
 							hrac2_length = strlen(hrac2);
-							/*
-							if(strchr(hrac2, '\0')){
-                                hrac2_length = strlen(hrac2);
-							}else{
-                                hrac2_length = strlen(hrac2) - 1;
-							}
-							if(strchr(hrac1, '\0')){
-                                hrac1_length = strlen(hrac1);
-							}else{
-                                hrac1_length = strlen(hrac1) - 1;
-							}*/
 							start_of_queue += 2;
-							//hrac1_length = strlen(hrac1);
-							/* jina hodnotz linux */
-							//total_length = 16 + strlen(queue[start_of_queue]) + strlen(queue[start_of_queue + 1]);
 							total_length = 16 + hrac1_length + hrac2_length;
 
 							memset(mess_buf, '\0', sizeof(mess_buf));
-							//sprintf(mess_buf, "KIVUPSgame%d0%d%s0%d%s\n", total_length, strlen(queue[start_of_queue]), hrac1, strlen(queue[start_of_queue + 1]), hrac2);
 							sprintf(mess_buf, "KIVUPSgame%d0%d%s0%d%s\n", total_length, hrac1_length, hrac1, hrac2_length, hrac2);
 							printf("odesilam %s", mess_buf);
 							for (int i = 0; i < client_count; i++) {
