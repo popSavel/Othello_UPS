@@ -95,9 +95,8 @@ public class SocketManager extends Thread{
 
     private void sendMessage(String message) {
         System.out.println("posilam: " + message);
-        int sendNow = messagesSend;
-        messagesSend++;
         wait = new Thread(() -> {
+            int sendNow = messagesSend;
             try {
                 sleep(100);
             } catch (InterruptedException e) {
@@ -120,6 +119,7 @@ public class SocketManager extends Thread{
             }
         });
         out.println(message);
+        messagesSend++;
         wait.start();
     }
 
