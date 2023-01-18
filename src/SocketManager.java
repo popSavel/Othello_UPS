@@ -4,6 +4,7 @@ import java.io.*;
 import java.net.InetAddress;
 import java.net.Socket;
 import java.net.SocketException;
+import java.net.SocketTimeoutException;
 
 public class SocketManager extends Thread{
 
@@ -29,14 +30,17 @@ public class SocketManager extends Thread{
     boolean oppDisc = false;
     int messagesSend = 0;
     int messagesConfirmed = 0;
+    int unConfirmedMessages;
     Thread wait;
     long lastMessageTime;
+
+    long lastSendTime;
 
 
     public SocketManager(String ip, int port) {
         try {
             this.socket = new Socket(ip, port);
-            socket.setSoTimeout(10000);
+            socket.setSoTimeout(8000);
             InetAddress adresa = socket.getInetAddress();
             System.out.print("Pripojuju se na : "+adresa.getHostAddress()+" se jmenem : "+adresa.getHostName()+"\n" );
             ins = new BufferedReader(new InputStreamReader(socket.getInputStream()));
@@ -49,7 +53,6 @@ public class SocketManager extends Thread{
                 String pingMessage = PREFIX + "ping12";
                 while(true){
                     if(System.currentTimeMillis() - lastMessageTime > 20000 && serverAvailable){
-                        //unconfirmedMessages = 0;
                         sendMessage(pingMessage);
                         lastMessageTime = System.currentTimeMillis();
                     }
@@ -57,16 +60,16 @@ public class SocketManager extends Thread{
             });
 
             /* po prijeti se ceka na ping zpravu */
-           String message = ins.readLine();
-           if(message.contains(PREFIX + "ping12")){
-               loginWindow = new LoginWindow(this);
-               System.out.println("Spojeni potvrzeno");
-               out.println("OK");
-               socket.setSoTimeout(0);
-               lastMessageTime = System.currentTimeMillis();
-               ping.start();
-               this.start();
-           }
+            String message = ins.readLine();
+            if(message.contains(PREFIX + "ping12")){
+                loginWindow = new LoginWindow(this);
+                System.out.println("Spojeni potvrzeno");
+                out.println("OK");
+                //socket.setSoTimeout(0);
+                lastMessageTime = System.currentTimeMillis();
+                ping.start();
+                this.start();
+            }
         } catch (IOException e) {
             System.out.println("Nelze navazat spojeni s " + ip + ":" + port);
             System.exit(1);
@@ -94,33 +97,10 @@ public class SocketManager extends Thread{
     }
 
     private void sendMessage(String message) {
+        unConfirmedMessages++;
+       // lastSendTime = System.currentTimeMillis();
         System.out.println("posilam: " + message);
-        wait = new Thread(() -> {
-            int sendNow = messagesSend;
-            try {
-                sleep(100);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
-            if(sendNow - messagesConfirmed > 2){
-                long discTime = System.currentTimeMillis();
-                System.out.println("Vypadek serveru");
-                serverUnavailable();
-                while(true){
-                    if(System.currentTimeMillis() - discTime > 60000 && !serverAvailable){
-                        System.out.println("Server prestal komunikovat, koncim");
-                        System.exit(1);
-                    }else if(serverAvailable){
-                        return;
-                    }
-                }
-            }else if(sendNow - messagesConfirmed > 0){
-                sendMessage(PREFIX + "ping12");
-            }
-        });
         out.println(message);
-        messagesSend++;
-        wait.start();
     }
 
     private void serverUnavailable() {
@@ -168,9 +148,23 @@ public class SocketManager extends Thread{
         String message;
         while(true) {
             try {
+                if(!serverAvailable){
+                    socket.setSoTimeout(0);
+                }else{
+                    if(System.currentTimeMillis() - lastSendTime < 2000 && unConfirmedMessages > 0) {
+                        socket.setSoTimeout(3000);
+                    }else{
+                        socket.setSoTimeout(10000);
+                    }
+                }
+            } catch (SocketException e) {
+                throw new RuntimeException(e);
+            }
+            try {
                 message = ins.readLine();
                 lastMessageTime = System.currentTimeMillis();
-                if(!serverAvailable){
+                socket.setSoTimeout(0);
+                if (!serverAvailable) {
                     serverReconnect();
                 }
                 System.out.println("received: " + message);
@@ -262,15 +256,31 @@ public class SocketManager extends Thread{
                             gameWindow.recn();
                         }
                     }
-                }
-                else if(message.contains("OK")){
+                } else if (message.contains("OK")) {
                     messagesConfirmed++;
+                    unConfirmedMessages--;
                 } else {
                     System.out.println("nevalidni zprava");
                     socket.close();
                     System.out.println("Ukoncuji komunikaci");
                     System.exit(1);
                 }
+
+            }catch(SocketTimeoutException e){
+                    long discTime = System.currentTimeMillis();
+                    System.out.println("Vypadek serveru");
+                    serverUnavailable();
+                    wait = new Thread(() -> {
+                        while(true){
+                            if(System.currentTimeMillis() - discTime > 60000 && !serverAvailable){
+                                System.out.println("Server prestal komunikovat, koncim");
+                                System.exit(1);
+                            }else if(serverAvailable){
+                                return;
+                            }
+                        }
+                    });
+                    wait.start();
             } catch (IOException e) {
                 System.out.println("Komunikace se serverem byla přerušena");
                 System.exit(1);
@@ -321,7 +331,7 @@ public class SocketManager extends Thread{
     public void backToLobby() {
         gameWindow.setVisible(false);
         endGame.setVisible(false);
-	    queueWindow = new QueueWindow(this, this.nickname);
+        queueWindow = new QueueWindow(this, this.nickname);
         queueWindow.setNick(nickname);
         queueWindow.setVisible(true);
     }
