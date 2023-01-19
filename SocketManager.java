@@ -64,7 +64,7 @@ public class SocketManager extends Thread{
                 loginWindow = new LoginWindow(this);
                 System.out.println("Spojeni potvrzeno");
                 out.println("OK");
-                //socket.setSoTimeout(0);
+                socket.setSoTimeout(0);
                 lastMessageTime = System.currentTimeMillis();
                 ping.start();
                 this.start();
@@ -97,7 +97,7 @@ public class SocketManager extends Thread{
 
     private void sendMessage(String message) {
         unConfirmedMessages++;
-       // lastSendTime = System.currentTimeMillis();
+        lastSendTime = System.currentTimeMillis();
         System.out.println("posilam: " + message);
         out.println(message);
     }
