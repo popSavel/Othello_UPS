@@ -28,8 +28,7 @@ public class SocketManager extends Thread{
 
     boolean serverAvailable = true;
     boolean oppDisc = false;
-    int messagesSend = 0;
-    int messagesConfirmed = 0;
+    boolean discSus = false;
     int unConfirmedMessages;
     Thread wait;
     long lastMessageTime;
@@ -65,7 +64,7 @@ public class SocketManager extends Thread{
                 loginWindow = new LoginWindow(this);
                 System.out.println("Spojeni potvrzeno");
                 out.println("OK");
-                //socket.setSoTimeout(0);
+                socket.setSoTimeout(0);
                 lastMessageTime = System.currentTimeMillis();
                 ping.start();
                 this.start();
@@ -98,7 +97,7 @@ public class SocketManager extends Thread{
 
     private void sendMessage(String message) {
         unConfirmedMessages++;
-       // lastSendTime = System.currentTimeMillis();
+        lastSendTime = System.currentTimeMillis();
         System.out.println("posilam: " + message);
         out.println(message);
     }
@@ -151,8 +150,8 @@ public class SocketManager extends Thread{
                 if(!serverAvailable){
                     socket.setSoTimeout(0);
                 }else{
-                    if(System.currentTimeMillis() - lastSendTime < 2000 && unConfirmedMessages > 0) {
-                        socket.setSoTimeout(3000);
+                    if(discSus){
+                        socket.setSoTimeout(1000);
                     }else{
                         socket.setSoTimeout(10000);
                     }
@@ -166,6 +165,9 @@ public class SocketManager extends Thread{
                 socket.setSoTimeout(0);
                 if (!serverAvailable) {
                     serverReconnect();
+                }
+                if(discSus){
+                    discSus = false;
                 }
                 System.out.println("received: " + message);
                 if (message.contains(PREFIX)) {
@@ -257,7 +259,6 @@ public class SocketManager extends Thread{
                         }
                     }
                 } else if (message.contains("OK")) {
-                    messagesConfirmed++;
                     unConfirmedMessages--;
                 } else {
                     System.out.println("nevalidni zprava");
@@ -267,6 +268,7 @@ public class SocketManager extends Thread{
                 }
 
             }catch(SocketTimeoutException e){
+                if(discSus){
                     long discTime = System.currentTimeMillis();
                     System.out.println("Vypadek serveru");
                     serverUnavailable();
@@ -281,6 +283,12 @@ public class SocketManager extends Thread{
                         }
                     });
                     wait.start();
+                }else{
+                    if(System.currentTimeMillis() - lastSendTime > 1000 && System.currentTimeMillis() - lastSendTime < 5000 && unConfirmedMessages > 0) {
+                        discSus = true;
+                        sendMessage(PREFIX + "ping12");
+                    }
+                }
             } catch (IOException e) {
                 System.out.println("Komunikace se serverem byla přerušena");
                 System.exit(1);
