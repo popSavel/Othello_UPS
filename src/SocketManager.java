@@ -150,7 +150,7 @@ public class SocketManager extends Thread{
                 if(!serverAvailable){
                     socket.setSoTimeout(0);
                 }else{
-                    if(discSus){
+                    if(discSus == true){
                         socket.setSoTimeout(1000);
                     }else{
                         socket.setSoTimeout(10000);
@@ -166,7 +166,7 @@ public class SocketManager extends Thread{
                 if (!serverAvailable) {
                     serverReconnect();
                 }
-                if(discSus){
+                if(discSus == true){
                     discSus = false;
                 }
                 System.out.println("received: " + message);
@@ -268,7 +268,8 @@ public class SocketManager extends Thread{
                 }
 
             }catch(SocketTimeoutException e){
-                if(discSus){
+                System.out.println("EXCEPTION");
+                if(discSus == true){
                     long discTime = System.currentTimeMillis();
                     System.out.println("Vypadek serveru");
                     serverUnavailable();
