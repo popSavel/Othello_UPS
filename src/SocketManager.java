@@ -284,7 +284,7 @@ public class SocketManager extends Thread{
                     });
                     wait.start();
                 }else{
-                    if(System.currentTimeMillis() - lastSendTime > 1000 && System.currentTimeMillis() - lastSendTime < 5000 && unConfirmedMessages > 0) {
+                    if(System.currentTimeMillis() - lastSendTime > 1000 && System.currentTimeMillis() - lastSendTime < 10000 && unConfirmedMessages > 0) {
                         discSus = true;
                         sendMessage(PREFIX + "ping12");
                     }
