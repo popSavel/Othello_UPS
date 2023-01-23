@@ -178,6 +178,7 @@ void temporary_disc(int index) {
 			}
 		}
 		/* odebrat pokud byl v queue  ale ne ve hre*/
+		printf("odesilam %s\n", mess_buf);
 		for (int i = 0; i < client_count; i++) {
 			if (strcmp(players[index], queue[i]) == 0 && was_in_game == 0) {
 				was_in_queue[index] = 1;
@@ -190,7 +191,6 @@ void temporary_disc(int index) {
 					queue[players_in_queue] = strdup(empty);
 				}
 			}
-			printf("odesilam %s\n", mess_buf);
 			sendMessage(sockets[i], mess_buf, i);
 		}
 	}
@@ -338,6 +338,9 @@ void* thread_fnc(void* arg) {
 			messages_left = 1;
 
 			if (remainder == 1) {
+				if (parse_buf[strlen(parse_buf) - 1] == 13 || parse_buf[strlen(parse_buf) - 1] == 10) {
+					parse_buf[strlen(parse_buf) - 1] == '\0';
+				}
 				strcat(parse_buf, cbuf);
 				remainder = 0;
 			}
@@ -347,16 +350,7 @@ void* thread_fnc(void* arg) {
 			}
 
 			printf("[%d] Prijato %s", skt, parse_buf);
-			/*
-			printf("*********\n");
-			for (int i = 0; i < strlen(parse_buf); i++) {
-				printf("%d\n", parse_buf[i]);
-			}
-			printf("\n");
-			printf("*********\n");
-			printf("[%d] delka %ld\n", skt, strlen(parse_buf));*/
 			
-
 			while (messages_left == 1) {
 				if (parse_buf[0] == 'O' && parse_buf[1] == 'K') {
 					unconfirmedMessages[index]--;
@@ -365,7 +359,6 @@ void* thread_fnc(void* arg) {
 						while (parse_buf[0] == 10 || parse_buf[0] == 13) {
 							memmove(parse_buf, parse_buf + 1, strlen(parse_buf));
 						}
-						printf("parse_buf: %s\n", parse_buf);
 					}
 					else {
 						messages_left = 0;
@@ -373,13 +366,12 @@ void* thread_fnc(void* arg) {
 				}
 				else {
 					char* valid = strstr(parse_buf, "KIVUPS");
-					if (valid != NULL) {
+					if (valid != NULL && strlen(parse_buf) >= 12) {
 						confirmMessage(skt);
 						char mess_length[2];
 						memcpy(mess_length, &valid[10], 2);
 						length = atoi(mess_length);
 						if (strlen(parse_buf) > length) {
-							printf("valid zprava delka: %d\n", length);
 							mess = malloc(sizeof(message));
 							mess = getMessage(valid);
 
@@ -511,7 +503,6 @@ void* thread_fnc(void* arg) {
 							while (parse_buf[0] == 10 || parse_buf[0] == 13) {
 								memmove(parse_buf, parse_buf + 1, strlen(parse_buf) - 1);
 							}
-							printf("parse_buf: %s\n", parse_buf);
 						}
 						else {
 							messages_left = 0;
@@ -519,6 +510,14 @@ void* thread_fnc(void* arg) {
 						}
 					}else{
 						messages_left = 0;
+						if (valid != NULL) {
+							remainder = 1;
+						}
+						else {
+							if (parse_buf[0] == 'K') {
+								remainder = 1;
+							}
+						}
 					}
 				}
 			}

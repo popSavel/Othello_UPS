@@ -51,7 +51,7 @@ public class SocketManager extends Thread{
             Thread ping = new Thread(() -> {
                 String pingMessage = PREFIX + "ping12";
                 while(true){
-                    if(System.currentTimeMillis() - lastMessageTime > 20000 && serverAvailable){
+                    if(System.currentTimeMillis() - lastMessageTime > 5000 && serverAvailable){
                         sendMessage(pingMessage);
                         lastMessageTime = System.currentTimeMillis();
                     }
@@ -64,18 +64,6 @@ public class SocketManager extends Thread{
                 loginWindow = new LoginWindow(this);
                 System.out.println("Spojeni potvrzeno");
                 out.println("OK");
-
-
-                /*********************TEST******************/
-                out.println("KIVUPSturn2004skoo22");
-                out.println("KIVUPSturn2004skoo12");
-                out.println("OK");
-                out.println("KIVUPSturn2004skoo21");
-                out.println("OK");
-                out.println("KIVUPSturn2004skoo30");
-                /******************KONEC********************/
-
-
                 socket.setSoTimeout(0);
                 lastMessageTime = System.currentTimeMillis();
                 ping.start();
@@ -165,7 +153,7 @@ public class SocketManager extends Thread{
                     if(discSus == true){
                         socket.setSoTimeout(1000);
                     }else{
-                        socket.setSoTimeout(11000);
+                        socket.setSoTimeout(6000);
                     }
                 }
             } catch (SocketException e) {
@@ -174,7 +162,6 @@ public class SocketManager extends Thread{
             try {
                 message = ins.readLine();
                 lastMessageTime = System.currentTimeMillis();
-                //socket.setSoTimeout(0);
                 if (!serverAvailable) {
                     serverReconnect();
                 }
@@ -280,7 +267,6 @@ public class SocketManager extends Thread{
                 }
 
             }catch(SocketTimeoutException e){
-                System.out.println("EXCEPTION");
                 if(discSus == true){
                     long discTime = System.currentTimeMillis();
                     System.out.println("Vypadek serveru");
@@ -297,7 +283,7 @@ public class SocketManager extends Thread{
                     });
                     wait.start();
                 }else{
-                    if(System.currentTimeMillis() - lastSendTime < 10000) {
+                    if(System.currentTimeMillis() - lastSendTime < 6000) {
                         System.out.println("nastavuji sus");
                         discSus = true;
                         sendMessage(PREFIX + "ping12");
