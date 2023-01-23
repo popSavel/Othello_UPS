@@ -64,6 +64,18 @@ public class SocketManager extends Thread{
                 loginWindow = new LoginWindow(this);
                 System.out.println("Spojeni potvrzeno");
                 out.println("OK");
+
+
+                /*********************TEST******************/
+                out.println("KIVUPSturn2004skoo22");
+                out.println("KIVUPSturn2004skoo12");
+                out.println("OK");
+                out.println("KIVUPSturn2004skoo21");
+                out.println("OK");
+                out.println("KIVUPSturn2004skoo30");
+                /******************KONEC********************/
+
+
                 socket.setSoTimeout(0);
                 lastMessageTime = System.currentTimeMillis();
                 ping.start();
@@ -153,7 +165,7 @@ public class SocketManager extends Thread{
                     if(discSus == true){
                         socket.setSoTimeout(1000);
                     }else{
-                        socket.setSoTimeout(10000);
+                        socket.setSoTimeout(11000);
                     }
                 }
             } catch (SocketException e) {
@@ -261,7 +273,7 @@ public class SocketManager extends Thread{
                 } else if (message.contains("OK")) {
                     unConfirmedMessages--;
                 } else {
-                    System.out.println("nevalidni zprava");
+                    System.out.println("nevalidni zprava: " + message);
                     socket.close();
                     System.out.println("Ukoncuji komunikaci");
                     System.exit(1);
