@@ -271,6 +271,7 @@ void* thread_ping(void *arg) {
 void* thread_fnc(void* arg) {
 
 	char cbuf[BUFF_SIZE];
+	//char * parse_buf = malloc(sizeof(char) * BUFF_SIZE * 2);
 	char parse_buf[BUFF_SIZE * 2];
 	int remainder = 0;
 
@@ -337,10 +338,8 @@ void* thread_fnc(void* arg) {
 			}
 			messages_left = 1;
 
+            printf("pred prijetim: %d\n", remainder);
 			if (remainder == 1) {
-				if (parse_buf[strlen(parse_buf) - 1] == 13 || parse_buf[strlen(parse_buf) - 1] == 10) {
-					parse_buf[strlen(parse_buf) - 1] == '\0';
-				}
 				strcat(parse_buf, cbuf);
 				remainder = 0;
 			}
@@ -350,8 +349,10 @@ void* thread_fnc(void* arg) {
 			}
 
 			printf("[%d] Prijato %s", skt, parse_buf);
-			
+			strcat(parse_buf, "Bbbbbbb");
+
 			while (messages_left == 1) {
+                printf("iterace: %s\n", parse_buf);
 				if (parse_buf[0] == 'O' && parse_buf[1] == 'K') {
 					unconfirmedMessages[index]--;
 					if (strlen(parse_buf) > 4) {
@@ -479,7 +480,8 @@ void* thread_fnc(void* arg) {
 							comp = strcmp(mess->type, "turn");
 							if (comp == 0) {
 								memset(mess_buf, '\0', sizeof(mess_buf));
-								memcpy(mess_buf, &parse_buf, mess->length);
+								strncpy(mess_buf, parse_buf, mess->length);
+								//memcpy(mess_buf, &parse_buf[], mess->length);
 								strcat(mess_buf, "\n");
 								printf("odesilam %s", mess_buf);
 								for (int i = 0; i < client_count; i++) {
@@ -499,9 +501,9 @@ void* thread_fnc(void* arg) {
 									}
 								}
 							}
-							memmove(parse_buf, parse_buf + length, strlen(parse_buf) - length);
+							memmove(parse_buf, parse_buf + length, strlen(parse_buf));
 							while (parse_buf[0] == 10 || parse_buf[0] == 13) {
-								memmove(parse_buf, parse_buf + 1, strlen(parse_buf) - 1);
+								memmove(parse_buf, parse_buf + 1, strlen(parse_buf));
 							}
 						}
 						else {
